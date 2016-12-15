@@ -4,14 +4,14 @@ from scipy.io import savemat
 
 REACTION_FNAME = 'examples/mishary_reactions.txt'
 PYTHON_BIN = 'python'
-PYTHON_SCRIPT_FNAME = 'python/component_contribution.py'
+PYTHON_SCRIPT_FNAME = 'component_contribution/component_contribution_trainer.py'
 OUTPUT_FNAME = 'res/mishary.mat'
 
 def python_main():
     logger = logging.getLogger('')
     logger.setLevel(logging.INFO)
-    from python.component_contribution import ComponentContribution
-    from python.kegg_model import KeggModel
+    from component_contribution.component_contribution_trainer import ComponentContribution
+    from component_contribution.kegg_model import KeggModel
 
     cc = ComponentContribution.init()
     reaction_strings = open(REACTION_FNAME, 'r').readlines()
