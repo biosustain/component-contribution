@@ -58,7 +58,7 @@ class ComponentContribution(object):
     @staticmethod
     def from_matfile(file_name, training_data=None):
         cc = ComponentContribution(training_data=training_data)
-        cc.params = loadmat(file_name)
+        cc.params = loadmat(file_name) #DATAINPUT
         return cc
     
     def get_major_ms_dG0_f(self, compound_id):
@@ -130,7 +130,7 @@ class ComponentContribution(object):
         else:
             g = np.matrix(np.zeros((1, 1)))
 
-        g.resize((G.shape[1], 1))
+        g.resize((G.shape[1], 1))# here
 
         return x, g
 

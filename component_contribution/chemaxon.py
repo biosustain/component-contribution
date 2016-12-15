@@ -7,7 +7,8 @@ if platform.system() == 'Windows':
     CXCALC_BIN = 'C:\\Program Files (x86)\\ChemAxon\\MarvinBeans\\bin\\cxcalc.bat'
     use_shell_for_echo = True
 else:
-    CXCALC_BIN = 'cxcalc'
+    # CXCALC_BIN = 'cxcalc'
+    CXCALC_BIN = '/Applications/ChemAxon/JChemSuite/bin/cxcalc'
     use_shell_for_echo = False
 
 MID_PH = 7.0

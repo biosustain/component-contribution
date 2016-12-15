@@ -51,9 +51,9 @@ class CompoundCacher(object):
     def __init__(self, cache_fname=None):
         self.cache_fname = cache_fname
         if self.cache_fname is None:
-            self.cache_fname = DEFAULT_CACHE_FNAME
+            self.cache_fname = DEFAULT_CACHE_FNAME #DATAINPUT
         
-        compounds = json.load(gzip.open(KEGG_COMPOUND_JSON_FNAME, 'r'))
+        compounds = json.load(gzip.open(KEGG_COMPOUND_JSON_FNAME, 'r')) #DATAINPUT
         self.compound_id2inchi = { d['compound_id']: d['inchi'] 
                                    for d in compounds }
         self.need_to_update_cache_file = False

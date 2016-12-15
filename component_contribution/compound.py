@@ -274,13 +274,23 @@ class Compound(object):
         else:
             return -sum(self.pKas[i_to:i_from]) * R * T * np.log(10)
 
+    def get_transform(self, pH, I, T):
+        """
+            Returns the difference in kJ/mol between dG'0 and the dG0 of the
+            MS with index 'i'.
+
+            Returns:
+            (molelcule dG'0 - sp. dG0[0])
+        """
+        return self._transform(pH, I, T)
+
     def transform(self, i, pH, I, T):
         """
             Returns the difference in kJ/mol between dG'0 and the dG0 of the 
             MS with index 'i'.
             
             Returns:
-                (dG'0 - dG0[0]) + (dG0[0] - dG0[i])  = dG'0 - dG0[i]
+            (molelcule dG'0 - sp. dG0[0]) + (sp. dG0[0] - sp. dG0[i]) = molecule dG'0 - sp. dG0[i]
         """
         return self._transform(pH, I, T) + self._ddG(0, i, T)
 
