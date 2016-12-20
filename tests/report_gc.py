@@ -1,10 +1,10 @@
 import csv, os
 import numpy as np
-import matplotlib.pyplot as plt
-from python.component_contribution import ComponentContribution
-from python.kegg_model import KeggModel
+#import matplotlib.pyplot as plt
+from component_contribution.component_contribution_trainer import ComponentContribution
+from component_contribution.kegg_model import KeggModel
 
-REPORT_CACHE_FNAME = 'cache/report_gc.csv'
+REPORT_CACHE_FNAME = '../cache/report_gc.csv'
 cid2dG0 = {}
 if not os.path.exists(REPORT_CACHE_FNAME):
     fp = open(REPORT_CACHE_FNAME, 'w')
