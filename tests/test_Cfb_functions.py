@@ -17,6 +17,19 @@ with open(os.path.join('../..','del_atpMolFound_string'), 'r') as myfile:
 # ATP and this mol: https://pubchem.ncbi.nlm.nih.gov/compound/443290#section=Top
 smileMolecules = [ 'C1=NC2=C(C(=N1)N)N=CN2[C@H]3[C@@H]([C@@H]([C@H](O3)COP(=O)(O)OP(=O)(O)OP(=O)(O)O)O)O', 'C1=NC2=C(C(=N1)N)N=CN2C3C(C(C(O3)COP(=O)(O)OP(=O)(O)OP(=O)(O)O)O)O','C1=CC(C(C(=C1)CCC(=O)O)O)O'] #
 
+# testing melatonin and other
+# test_file = open("../../melatonin.sdf",'r')
+# atpmol = test_file.read()
+# data = [atpmol]
+
+test_file = open("../../Structure2D_CID_115348.sdf",'r')
+atpmol = test_file.read()
+data = [atpmol]
+
+
+
+print formation_energy(data,cc, 7, 0.1,format_molecule='mol')
+
 #print formation_energy(data,cc, 7, 0.1,format_molecule='mol')
 #
 #
