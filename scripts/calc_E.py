@@ -43,7 +43,7 @@ if __name__ == '__main__':
 	for row in reader:
 		formula = row[0].strip()
 		reaction = KeggReaction.parse_formula(formula)
-		reaction_atom_bag = reaction._get_reaction_atom_bag()
+		reaction_atom_bag = reaction._get_kegg_reaction_atom_bag()
 		n_e = reaction_atom_bag.pop('e-', 0)
 		if len(reaction_atom_bag) != 0:
 			raise ValueError('This is not a half-reaction'

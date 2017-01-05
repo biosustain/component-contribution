@@ -4,10 +4,11 @@ from scipy.io import savemat, loadmat
 from . import inchi2gv
 from .training_data import TrainingData
 from .kegg_reaction import KeggReaction
-from .compound_cacher import CompoundCacher
+from .compound_cacher import KeggCompoundCacher
 from .thermodynamic_constants import default_T
 from .molecule import Molecule, OpenBabelError
 from .linalg import LINALG
+from .CfB_functions import _decompose_bigg_reaction, load_bigg_dict
 
 base_path = os.path.split(os.path.realpath(__file__))[0]
 CC_CACHE_FNAME = os.path.join(base_path, '../cache/component_contribution_python.mat')
@@ -16,6 +17,8 @@ class ComponentContribution(object):
 
     def __init__(self, training_data=None):
         if training_data is None:
+
+            # load all the experimental data, remove unbalanced reactions, and reverse transform to get the dG0
             training_data = TrainingData()
 
         self.train_cids = list(training_data.cids)
@@ -30,7 +33,7 @@ class ComponentContribution(object):
         self.train_G = None
         self.params = None
 
-        self.ccache = CompoundCacher()
+        self.ccache = KeggCompoundCacher()
         self.groups_data = inchi2gv.init_groups_data()
         self.decomposer = inchi2gv.InChIDecomposer(self.groups_data)
         self.group_names = self.groups_data.GetGroupNames()
@@ -97,7 +100,8 @@ class ComponentContribution(object):
     def _decompose_reaction(self, reaction):
         if self.params is None:
             self.train()
-        
+
+        # load all cid's in the database, and G is all the groups in the cids_joined (reactants used to train)
         cids = list(self.params['cids'])
         G = self.params['G']
 
@@ -108,16 +112,16 @@ class ComponentContribution(object):
         G_prime = []
 
         for compound_id, coeff in reaction.iteritems():
-            if compound_id in self.cids_joined:
+            if compound_id in self.cids_joined: # cids_joined is the list of cid used in the training data
                 i = cids.index(compound_id)
                 x[i, 0] = coeff
             else:
                 # Decompose the compound and calculate the 'formation energy'
                 # using the group contributions.
-                # Note that the length of the group contribution vector we get 
-                # from CC is longer than the number of groups in "groups_data" 
-                # since we artifically added fictive groups to represent all the 
-                # non-decomposable compounds. Therefore, we truncate the 
+                # Note that the length of the group contribution vector we get
+                # from CC is longer than the number of groups in "groups_data"
+                # since we artifically added fictive groups to represent all the
+                # non-decomposable compounds. Therefore, we truncate the
                 # dG0_gc vector since here we only use GC for compounds which
                 # are not in cids_joined anyway.
                 x_prime.append(coeff)
@@ -202,12 +206,23 @@ class ComponentContribution(object):
             Returns:
                 the CC estimation for this reaction's untransformed dG0 (i.e.
                 using the major MS at pH 7 for each of the reactants)
+
+                X and G are the decompositions of the reaction into reactions and groups respectively
+                eq.10 in the paper
         """
         X = []
         G = []
+        if any([(r.format=='bigg') for r in reactions]):
+        # map(lambda w: [w=='bigg'], reactions):
+            bigg_dict = load_bigg_dict(filename='../data/bigg_models_metabolites.tsv')
+
         for reaction in reactions:
             try:
-                x, g = self._decompose_reaction(reaction)
+                if reaction.format == 'bigg':
+                    x, g , model_ids_to_replace = _decompose_bigg_reaction(self, reaction,bigg_dict)
+
+                else:
+                    x, g = self._decompose_reaction(reaction)
             except inchi2gv.GroupDecompositionError:
                 x = np.zeros((self.Nc, 1))
                 g = np.zeros((self.params['G'].shape[1], 1))
@@ -224,7 +239,9 @@ class ComponentContribution(object):
 
         dG0_cc = X.T * v_r + G.T * v_g
         U = X.T * C1 * X + X.T * C2 * G + G.T * C2.T * X + G.T * C3 * G
-        return dG0_cc, U
+
+        # im exporting "model_ids_to_replace" just for the compound cash which has the smiles and pka's
+        return dG0_cc, U, model_ids_to_replace
         
     def get_compound_json(self, compound_id):
         """

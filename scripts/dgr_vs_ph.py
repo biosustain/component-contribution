@@ -15,7 +15,7 @@ def KeggFile2ModelList(pathway_file):
         fields = kegg_file[entry]
         rids, fluxes, reactions = ParsedKeggFile.ParseReactionModule(fields)
         bounds = ParsedKeggFile.ParseBoundModule(fields)
-        model = KeggModel.from_formulas(reactions)
+        model = KeggModel.from_kegg_formulas(reactions)
         model.rids = rids
         pH = fields.GetFloatField('PH', 7.5)
         I = fields.GetFloatField('I', 0.2)

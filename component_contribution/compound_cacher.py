@@ -33,7 +33,7 @@ class Singleton(type):
             cls.instance=super(Singleton,cls).__call__(*args,**kw)
         return cls.instance
     
-class CompoundCacher(object):
+class KeggCompoundCacher(object):
     """
         CompoundCacher is a singleton that handles caching of Compound objects
         for the component-contribution package. The Compounds are retrieved by
@@ -86,7 +86,7 @@ class CompoundCacher(object):
         if compound_id not in self.compound_dict:
             logging.debug('Cache miss: %s' % str(compound_id))
             inchi = self.compound_id2inchi[compound_id]
-            comp = Compound.from_inchi('KEGG', compound_id, inchi)
+            comp = Compound.from_inchi_with_keggID('KEGG', compound_id, inchi)
             self.add(comp)
 
         logging.debug('Cache hit: %s' % str(compound_id))
@@ -164,7 +164,7 @@ class CompoundCacher(object):
         if start_from_scratch and os.path.exists(DEFAULT_CACHE_FNAME):
             os.remove(DEFAULT_CACHE_FNAME)
             
-        ccache = CompoundCacher(cache_fname=DEFAULT_CACHE_FNAME)
+        ccache = KeggCompoundCacher(cache_fname=DEFAULT_CACHE_FNAME)
         
         i = 0
         for compound_id in ccache.get_all_compound_ids():
@@ -184,5 +184,5 @@ if __name__ == '__main__':
     logger = logging.getLogger('')
     logger.setLevel(logging.WARNING)
     
-    CompoundCacher.RebuildCompoundJSON()
-    CompoundCacher.BuildCache()
+    KeggCompoundCacher.RebuildCompoundJSON()
+    KeggCompoundCacher.BuildCache()

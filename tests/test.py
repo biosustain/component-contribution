@@ -28,8 +28,8 @@ except ImportError:
     err_num += 1
 
 try:
-    from component_contribution.compound_cacher import CompoundCacher
-    ccache = CompoundCacher()
+    from component_contribution.compound_cacher import KeggCompoundCacher
+    ccache = KeggCompoundCacher()
     atp_comp = ccache.get_compound('C00002')
     assert(smiles_ATP_pH7 == atp_comp.smiles_pH7)
 except AssertionError:

@@ -22,7 +22,7 @@ else:
 
 REACTION_FNAME = 'tests/report_gc_reactions.txt'
 reaction_strings = open(REACTION_FNAME, 'r').readlines()
-model = KeggModel.from_formulas(reaction_strings)    
+model = KeggModel.from_kegg_formulas(reaction_strings)
 
 # compare the dG0_r of the model to the one we get if multiplying
 # the model stoichiometric matrix by the formation energies

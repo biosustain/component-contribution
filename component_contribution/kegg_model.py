@@ -1,7 +1,7 @@
 import re, csv, logging
 import numpy as np
 from kegg_reaction import KeggReaction
-from compound_cacher import CompoundCacher
+from compound_cacher import KeggCompoundCacher
 from kegg_errors import KeggParseException
 
 class KeggModel(object):
@@ -16,7 +16,7 @@ class KeggModel(object):
         assert len(self.cids) == self.S.shape[0]
         if self.rids is not None:
             assert len(self.rids) == self.S.shape[1]
-        self.ccache = CompoundCacher()
+        self.ccache = KeggCompoundCacher()
 
         # remove H+ from the stoichiometric matrix if it exists
         if 'C00080' in self.cids:
@@ -25,14 +25,14 @@ class KeggModel(object):
             self.cids.pop(i)
 
     @staticmethod
-    def from_file(fname, arrow='<=>', format='kegg', has_reaction_ids=False):
+    def from_file(fname, arrow='<=>', format='bigg', has_reaction_ids=False):
         """
-        reads a file containing reactions in KEGG format
+        reads a file containing reactions in BIGG format
         
         Arguments:
            fname            - the filename to read
            arrow            - the string used as the 'arrow' in each reaction (default: '<=>')
-           format           - the text file format provided ('kegg', 'tsv' or 'csv')
+           format           - the text file format provided ('bigg', 'tsv' or 'csv')
            has_reaction_ids - a boolean flag indicating if there is a column of
                               reaction IDs (separated from the reaction with
                               whitespaces)
@@ -41,7 +41,7 @@ class KeggModel(object):
         """
         fd = open(fname, 'r')
         if format == 'kegg':
-            model = KeggModel.from_formulas(fd.readlines(), arrow, has_reaction_ids)
+            model = KeggModel.from_kegg_formulas(fd.readlines(), arrow, has_reaction_ids)
         elif format == 'tsv':
             model = KeggModel.from_csv(fd, has_reaction_ids=has_reaction_ids, delimiter='\t')
         elif format == 'csv':
@@ -90,8 +90,8 @@ class KeggModel(object):
         return KeggModel(S, cids, rids)
     
     @staticmethod
-    def from_formulas(reaction_strings, arrow='<=>', has_reaction_ids=False,
-                      raise_exception=False):
+    def from_kegg_formulas(reaction_strings, arrow='<=>', has_reaction_ids=False,
+                           raise_exception=False):
         """
         parses a list of reactions in KEGG format
         
@@ -116,6 +116,7 @@ class KeggModel(object):
                     rid = tokens[0]
                     line = tokens[1]
                 try:
+                    # This creates a KeggReaction instance for each reaction. each react is a sparse dict. also has cc
                     reaction = KeggReaction.parse_formula(line, arrow, rid)
                 except KeggParseException as e:
                     logging.warning(str(e))

@@ -1,8 +1,8 @@
-from compound_cacher import CompoundCacher
+from compound_cacher import KeggCompoundCacher
 import csv, sys, re
 
 def main(fname, pH, I, T):
-    ccache = CompoundCacher()
+    ccache = KeggCompoundCacher()
     with open(fname, 'r') as csvfile:
         csvreader = csv.reader(csvfile, delimiter=',')
         csvreader.next()

@@ -22,7 +22,7 @@ with open(REACTION_FNAME, 'r') as fp:
     reaction_strings = fp.readlines()
 
 # Parse the reaction strings into a "KEGG" model
-model = KeggModel.from_formulas(reaction_strings, raise_exception=True)
+model = KeggModel.from_kegg_formulas(reaction_strings, raise_exception=True)
 
 # Train component-contribution predictive model
 cc = ComponentContribution.init()

@@ -4,7 +4,7 @@ Created on Wed Jun 17 09:53:00 2015
 
 @author: noore
 """
-from component_contribution.compound_cacher import CompoundCacher
+from component_contribution.compound_cacher import KeggCompoundCacher
 from component_contribution.kegg_reaction import KeggReaction
 from component_contribution import inchi2gv
 from scipy.io import savemat, loadmat
@@ -62,7 +62,7 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-    ccache = CompoundCacher()
+    ccache = KeggCompoundCacher()
     groups_data = inchi2gv.init_groups_data()
     decomposer = inchi2gv.InChIDecomposer(groups_data)
     w, b, G, cids, S = map(loadmat(args.train_file).get, ['w', 'b', 'G', 'cids', 'S'])

@@ -20,14 +20,13 @@ class Compound(object):
         self.majorMSpH7 = majorMSpH7
         self.nHs = nHs
         self.zs = zs
-    
-    @staticmethod
-    def from_kegg(compound_id):
-        return Compound.from_inchi('KEGG', compound_id,
-                                   Compound.get_inchi(compound_id))
 
     @staticmethod
-    def from_inchi(database, compound_id, inchi):
+    def from_kegg(compound_id):
+        return Compound.from_inchi_with_keggID('KEGG', compound_id, Compound.get_inchi_from_kegg(compound_id))
+
+    @staticmethod
+    def from_inchi_with_keggID(database, compound_id, inchi):
         if compound_id == 'C00080':
             # We add an exception for H+ (and put nH = 0) in order to eliminate
             # its effect of the Legendre transform
@@ -145,7 +144,7 @@ class Compound(object):
                         d['nHs'], d['zs'])
 
     @staticmethod
-    def get_inchi(compound_id):
+    def get_inchi_from_kegg(compound_id):
         s_mol = urllib.urlopen('http://rest.kegg.jp/get/cpd:%s/mol' % compound_id).read()
         return Compound.mol2inchi(s_mol)
 

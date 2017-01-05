@@ -1,7 +1,7 @@
 from component_contribution.compound import Compound
 from component_contribution.thermodynamic_constants import default_T
 from component_contribution import inchi2gv
-import openbabel, numpy
+import openbabel, numpy, csv, json, copy
 
 def check_if_already_exists_inchi(inchi):
 
@@ -226,7 +226,7 @@ def formation_energy(listMolecules, cc, pH=7, I=0.1, T=298.15, format_molecule='
 
         # based on the input format (KEGG, MOL, or SMILEs) this section creates a compound object.
         if format_molecule == 'kegg':
-            inchiS = Compound.get_inchi(molecule_input)
+            inchiS = Compound.get_inchi_from_kegg(molecule_input)
             cid = molecule_input
 
         elif format_molecule == 'smiles':
@@ -244,16 +244,16 @@ def formation_energy(listMolecules, cc, pH=7, I=0.1, T=298.15, format_molecule='
             raise ValueError('you did not input one of the valid format for the metabolites: \'kegg\', \'smiles\', or \'mol\'')
 
         # this only gets the pKa information of the molecule
-        comp = Compound.from_inchi('KEGG', cid, inchiS)
+        comp = Compound.from_inchi_with_keggID('KEGG', cid, inchiS)
         print comp
 
-        # get the thermodynamic information of the molecule
+        # get the thermodynamic information of the molecule # get the deltaGf transformed of the first species.
         if cid == None:
             major_ms_dG0_f = decompose_without_cache(cc, comp)
         else:
             major_ms_dG0_f = cc.get_major_ms_dG0_f(cid)
 
-        # get the deltaGf transformed of the first species. uses the pKa's calculated previously. if interested in the
+        # uses the pKa's calculated previously. if interested in the
         # other species, uncomment below
 
         # for d in comp.get_species(major_ms_dG0_f, default_T):
@@ -275,3 +275,89 @@ def formation_energy(listMolecules, cc, pH=7, I=0.1, T=298.15, format_molecule='
         cid_list.append(cid)
 
     return gibbs_formation_transformed_list, compound_list, cid_list
+
+def load_bigg_dict(filename = '../data/bigg_models_metabolites.tsv'):
+
+    with open(filename, mode='r') as infile:
+        reader = csv.reader(infile, delimiter='\t')
+        mydict = {rows[0]: rows[4] for rows in reader}
+    return mydict
+
+def _decompose_bigg_reaction(cc, reaction, bigg_dict):
+    if cc.params is None:
+        cc.train()
+
+    # copy the reaction because we will be modifying it
+    reaction_sparese_with_kegg =  copy.deepcopy(reaction.sparse)
+    only_kegg = True
+
+    # dict to replace the id's in the model
+    model_ids_to_replace = {}
+
+    # map all ids I can to kegg. bigg dict is the downloaded bigg metabolite database
+    for compound_id, coeff in reaction.iteritems():
+        all_references_json = bigg_dict[compound_id]
+        all_references_readable = json.loads(all_references_json)
+        kegg_reference = all_references_readable.get('KEGG Compound', None)
+
+        if kegg_reference != None:
+            kegg_id = kegg_reference[0]['id']
+            reaction_sparese_with_kegg[kegg_id] = reaction_sparese_with_kegg.pop(compound_id)
+            model_ids_to_replace[compound_id] = kegg_id
+
+        else:
+            # there were some non-kegg mets!
+            only_kegg = False
+            # what to do if there is at least one non-kegg item...?
+
+            # model_ids_to_replace
+
+            raise(ValueError)
+
+    if only_kegg:
+        reaction.sparse = copy.deepcopy(reaction_sparese_with_kegg)
+        reaction.format = 'kegg'
+
+    # load all cid's in the database, and G is all the groups in the cids_joined (reactants used to train)
+    cids = list(cc.params['cids'])
+    G = cc.params['G']
+
+    # calculate the reaction stoichiometric vector and the group incidence
+    # vector (x and g)
+    x = numpy.matrix(numpy.zeros((cc.Nc, 1)))
+    x_prime = []
+    G_prime = []
+
+    for compound_id, coeff in reaction.iteritems():
+        if compound_id in cc.cids_joined: # cids_joined is the list of cid used in the training data
+            i = cids.index(compound_id)
+            x[i, 0] = coeff
+        else:
+            # Decompose the compound and calculate the 'formation energy'
+            # using the group contributions.
+            # Note that the length of the group contribution vector we get
+            # from CC is longer than the number of groups in "groups_data"
+            # since we artifically added fictive groups to represent all the
+            # non-decomposable compounds. Therefore, we truncate the
+            # dG0_gc vector since here we only use GC for compounds which
+            # are not in cids_joined anyway.
+            x_prime.append(coeff)
+            comp = cc.ccache.get_compound(compound_id)
+            group_vec = cc.decomposer.smiles_to_groupvec(comp.smiles_pH7)
+            G_prime.append(group_vec.ToArray())
+
+    if x_prime != []:
+        g = numpy.matrix(x_prime) * numpy.vstack(G_prime)
+    else:
+        g = numpy.matrix(numpy.zeros((1, 1)))
+
+    # g1=copy.deepcopy(g)
+    g.resize((G.shape[1], 1), refcheck=False)# referencing is very weird in numpy?
+
+    return x, g, model_ids_to_replace
+
+def replace_ids_with_cids(model):
+
+    new_cids = [model.model_ids_to_replace.get(item, item) for item in model.cids]
+    model.cids = new_cids
+    return model
