@@ -10,7 +10,7 @@ REACTION_FNAME = os.path.join(example_path, 'wolf_reactions.txt')
 cc = ComponentContribution.init()
 with open(REACTION_FNAME, 'r') as fp:
     reaction_strings = fp.readlines()
-model = KeggModel.from_formulas(reaction_strings, raise_exception=True)
+model = KeggModel.from_kegg_formulas(reaction_strings, raise_exception=True)
 
 model.add_thermo(cc)
 dG0_prime, dG0_std, sqrt_Sigma = model.get_transformed_dG0(7.0, 0.1, 298.15)

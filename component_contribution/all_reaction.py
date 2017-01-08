@@ -185,10 +185,10 @@ class AllReaction(object):
     def is_empty(self):
         return len(self.sparse) == 0
             
-    def dense(self, cids):
-        s = np.matrix(np.zeros((len(cids), 1)))
+    def dense(self, ids):
+        s = np.matrix(np.zeros((len(ids), 1)))
         for cid, coeff in self.iteritems():
-            s[cids.index(cid), 0] = coeff
+            s[ids.index(cid), 0] = coeff
         return s
 
     def get_transform_ddG0(self, pH, I, T):

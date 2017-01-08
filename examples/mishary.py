@@ -15,7 +15,7 @@ def python_main():
 
     cc = ComponentContribution.init()
     reaction_strings = open(REACTION_FNAME, 'r').readlines()
-    model = KeggModel.from_formulas(reaction_strings)
+    model = KeggModel.from_kegg_formulas(reaction_strings)
     model.add_thermo(cc)
 
     dG0_prime, dG0_std = model.get_transformed_dG0(7.0, 0.2, 298.15)

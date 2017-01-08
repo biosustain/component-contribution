@@ -1,9 +1,10 @@
 import re, csv, logging
 import numpy as np
 from all_reaction import AllReaction
+from kegg_reaction import KeggReaction
 from compound_cacher import KeggCompoundCacher
 from kegg_errors import KeggParseException
-from CfB_functions import replace_ids_with_cids
+from CfB_functions import separate_S_matrix, _decompose_bigg_reaction, only_decompose
 
 class AllModel(object):
     
@@ -15,14 +16,20 @@ class AllModel(object):
         self.cids = cids
         self.rids = rids
         self.format = format
+        self.ccache = KeggCompoundCacher()
 
         assert len(self.cids) == self.S.shape[0]
 
         if self.rids is not None:
             assert len(self.rids) == self.S.shape[1]
 
-        #if format == 'kegg':
-        self.ccache = KeggCompoundCacher()
+
+
+        # Separate the S matrix in bigg id's and other
+        separated_by_id_type = separate_S_matrix(S,cids)
+        self.separated_by_id_type = separated_by_id_type
+
+        self.cids = separated_by_id_type['output_ids']
 
         # DO THIS FOR OTHER FORMATS AS WELL
         # remove H+ from the stoichiometric matrix if it exists
@@ -30,10 +37,6 @@ class AllModel(object):
             i = self.cids.index('C00080')
             self.S = np.vstack((self.S[:i, :], self.S[i + 1:, :]))
             self.cids.pop(i)
-        #else:
-        #   self.ccache = None
-
-
 
     @staticmethod
     def from_file(fname, arrow='<=>', format='kegg', has_reaction_ids=False):
@@ -84,21 +87,21 @@ class AllModel(object):
         else:
             rids = None
 
-        cids = set()
+        input_ids = set()
         for reaction in reactions:
-            cids = cids.union(reaction.keys())
+            input_ids = input_ids.union(reaction.keys())
 
         # convert the list of reactions in sparse notation into a full
         # stoichiometric matrix, where the rows (compounds) are according to the
         # CID list 'cids'.
-        cids = sorted(cids)
-        S = np.matrix(np.zeros((len(cids), len(reactions))))
+        input_ids = sorted(input_ids)
+        S = np.matrix(np.zeros((len(input_ids), len(reactions))))
         for i, reaction in enumerate(reactions):
-            S[:, i] = np.matrix(reaction.dense(cids))
+            S[:, i] = np.matrix(reaction.dense(input_ids))
 
         logging.debug('Successfully loaded %d reactions (involving %d unique compounds)' %
                       (S.shape[1], S.shape[0]))
-        return AllModel(S, cids, format, rids)
+        return AllModel(S, input_ids, format, rids)
 
     @staticmethod
     def from_kegg_reactions(kegg_reactions, has_reaction_ids=False):
@@ -161,7 +164,9 @@ class AllModel(object):
                 reaction = AllModel.parse_input(line, format, arrow, has_reaction_ids)
 
                 # uncomment balance check!
+                          ############
                 if False: # not reaction.is_balanced(fix_water=True, raise_exception=raise_exception):
+                          ############
                     not_balanced_count += 1
                     logging.warning('Model contains an unbalanced reaction: ' + line)
                     reaction = KeggReaction({})
@@ -234,15 +239,50 @@ class AllModel(object):
                 return None
 
     def add_thermo(self, cc):
-        # check that all CIDs in the reaction are already cached by CC
-        Nc, Nr = self.S.shape
-        reactions = []
+
+        # decompose the separate compnents from the different ids
+
+        # doing for kegg
+
+        S_kegg = self.separated_by_id_type['S_kegg']
+
+        bigg_to_kegg = self.separated_by_id_type['bigg_to_kegg']
+        bigg_to_kegg_dict = self.separated_by_id_type['bigg_to_kegg_dict']
+        kegg_ids = [bigg_to_kegg_dict[id] for id in bigg_to_kegg]
+
+        Nc, Nr = S_kegg.shape
+        kegg_reactions = []
         for j in xrange(Nr):
-            sparse = {self.cids[i]:self.S[i,j] for i in xrange(Nc)
-                      if self.S[i,j] != 0}
-            reaction = AllReaction(sparse, self.format)
-            reactions.append(reaction)
-            
+            sparse = {kegg_ids[i]:S_kegg[i,j] for i in xrange(Nc) if S_kegg[i,j] != 0}
+            reaction = KeggReaction(sparse)
+            kegg_reactions.append(reaction)
+
+        X_kegg, G_kegg = only_decompose(cc, kegg_reactions)
+
+
+
+        self.dG0, self.cov_dG0 = cc.get_dG0_r_multi(reactions)
+
+
+
+
+        # do for smile
+        try:
+            if True:
+                x, g, model_ids_to_replace_per_reac = _decompose_bigg_reaction(self, reaction, bigg_dict)
+
+            else:
+                x, g = self._decompose_reaction(reaction)
+
+        except inchi2gv.GroupDecompositionError:
+            pass
+
+
+
+        # do for bigg non kegg
+
+
+
         self.dG0, self.cov_dG0, self.model_ids_to_replace = cc.get_dG0_r_multi(reactions)
         
     def get_transformed_dG0(self, pH, I, T):
@@ -268,19 +308,17 @@ class AllModel(object):
             transformed values
         """
 
-        replace_ids_with_cids(self)
-
-        # DO THIS FOR OTHER FORMATS AS WELL
-        # remove H+ from the stoichiometric matrix if it exists
-        if 'C00080' in self.cids:
-            i = self.cids.index('C00080')
-            self.S = np.vstack((self.S[:i, :], self.S[i + 1:, :]))
-            self.cids.pop(i)
-
         ddG0_compounds = np.matrix(np.zeros((self.S.shape[0], 1)))
         for i, cid in enumerate(self.cids):
-            comp = self.ccache.get_compound(cid)
-            ddG0_compounds[i, 0] = comp.transform_pH7(pH, I, T)
+            if cid in self.separated_by_id_type['non_kegg']:
+                comp = self.separated_by_id_type['non_kegg_refs'][cid]
+            else:
+                comp = self.ccache.get_compound(cid)
+
+            try:
+                ddG0_compounds[i, 0] = comp.transform_pH7(pH, I, T)
+            except:
+                ddG0_compounds[i, 0] = 0
         
         ddG0_forward = np.dot(self.S.T, ddG0_compounds)
         return ddG0_forward

@@ -97,7 +97,7 @@ class ComponentContribution(object):
             except inchi2gv.GroupDecompositionError:
                 return np.nan
 
-    def _decompose_reaction(self, reaction):
+    def _decompose_reaction(self, reaction, this):
         if self.params is None:
             self.train()
 
@@ -125,7 +125,12 @@ class ComponentContribution(object):
                 # dG0_gc vector since here we only use GC for compounds which
                 # are not in cids_joined anyway.
                 x_prime.append(coeff)
-                comp = self.ccache.get_compound(compound_id)
+
+                if compound_id in self.ccache.compound_dict or compound_id in self.ccache.compound_id2inchi:
+                    comp = self.ccache.get_compound(compound_id)
+                else:
+                    comp = this['non_kegg_refs'][compound_id]
+
                 group_vec = self.decomposer.smiles_to_groupvec(comp.smiles_pH7)
                 G_prime.append(group_vec.ToArray())
 
@@ -134,7 +139,7 @@ class ComponentContribution(object):
         else:
             g = np.matrix(np.zeros((1, 1)))
 
-        g.resize((G.shape[1], 1))# here
+        g.resize((G.shape[1], 1), refcheck=False)# here
 
         return x, g
 
@@ -198,7 +203,7 @@ class ComponentContribution(object):
 
             return dG0_cc, np.sqrt(s_cc_sqr), analysis
 
-    def get_dG0_r_multi(self, reactions):
+    def get_dG0_r_multi(self, reactions, this):
         """
             Arguments:
                 reaction - a KeggReaction object
@@ -212,17 +217,10 @@ class ComponentContribution(object):
         """
         X = []
         G = []
-        if any([(r.format=='bigg') for r in reactions]):
-        # map(lambda w: [w=='bigg'], reactions):
-            bigg_dict = load_bigg_dict(filename='../data/bigg_models_metabolites.tsv')
 
         for reaction in reactions:
             try:
-                if reaction.format == 'bigg':
-                    x, g , model_ids_to_replace = _decompose_bigg_reaction(self, reaction,bigg_dict)
-
-                else:
-                    x, g = self._decompose_reaction(reaction)
+                x, g = self._decompose_reaction(reaction, this)
             except inchi2gv.GroupDecompositionError:
                 x = np.zeros((self.Nc, 1))
                 g = np.zeros((self.params['G'].shape[1], 1))
@@ -240,8 +238,7 @@ class ComponentContribution(object):
         dG0_cc = X.T * v_r + G.T * v_g
         U = X.T * C1 * X + X.T * C2 * G + G.T * C2.T * X + G.T * C3 * G
 
-        # im exporting "model_ids_to_replace" just for the compound cash which has the smiles and pka's
-        return dG0_cc, U, model_ids_to_replace
+        return dG0_cc, U
         
     def get_compound_json(self, compound_id):
         """
