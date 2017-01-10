@@ -2,7 +2,7 @@ from component_contribution.compound import Compound
 from component_contribution.thermodynamic_constants import default_T
 from component_contribution import inchi2gv
 from component_contribution.kegg_reaction import KeggReaction
-import openbabel, numpy, csv, json, os.path
+import openbabel, numpy, csv, json, os.path, urllib
 from component_contribution.Chebi_web import ChEBI
 
 
@@ -187,7 +187,7 @@ def convert2any(s, formatin, formatout):
 
     conv = openbabel.OBConversion()
     conv.SetInAndOutFormats(formatin, formatout)
-    # conv.AddOption("F", conv.OUTOPTIONS)
+    conv.AddOption("--gen3d", conv.OUTOPTIONS)
     # conv.AddOption("T", conv.OUTOPTIONS)
     # conv.AddOption("x", conv.OUTOPTIONS, "noiso")
     # conv.AddOption("w", conv.OUTOPTIONS)
@@ -335,7 +335,7 @@ def _decompose_bigg_reaction(cc, reaction, bigg_dict):
 
     return x, g, model_ids_to_replace
 
-def separate_S_matrix(S,input_ids):
+def process_input_mets(input_ids,ccache):
 
     '''
     Component contribution as it is written gets all of its information from a cache file that matches up a "kegg id"
@@ -344,7 +344,6 @@ def separate_S_matrix(S,input_ids):
     Conversely, in reality all of the group decomposition is based on smiles. if we can not retrieve the kegg id then we
     shall do group decomposition with the smiles.
 
-    :param S:
     :param input_ids:
     :return:
     '''
@@ -374,13 +373,16 @@ def separate_S_matrix(S,input_ids):
                 inchiS = consistent_to_inchi(mol, 'mol')
                 cid, Name = check_if_already_exists_inchi(inchiS)
                 if cid == None:
-                    comp = Compound.from_inchi_with_keggID('MOL', cid, inchiS)
+                    comp = Compound.from_inchi_with_keggID('MOL', compound_id, inchiS)
+                    comp.molfile = mol
                     # save the references
                     non_kegg_refs[compound_id] = comp
                     non_kegg.append(compound_id)
                 else:
-                    kegg_id = cid
-                    to_kegg_dict[compound_id] = kegg_id
+                    comp = ccache.get_compound(cid)
+                    comp.molfile = mol
+                    non_kegg_refs[compound_id] = comp
+                    to_kegg_dict[compound_id] = cid
                     to_kegg.append(compound_id)
             else: raise ValueError
 
@@ -394,12 +396,17 @@ def separate_S_matrix(S,input_ids):
                 kegg_id = kegg_reference[0]['id']
                 to_kegg_dict[compound_id] = kegg_id
                 to_kegg.append(compound_id)
+                comp = ccache.get_compound(kegg_id)
+                s_mol = urllib.urlopen('http://rest.kegg.jp/get/cpd:%s/mol' % kegg_id).read()
+                comp.molfile = s_mol
+                non_kegg_refs[compound_id] = comp
+
 
             else: # bigg id with no kegg id!!!
                 # get compound info... currently only checks if there is chebi info.
-                comp_data = get_compound_info(all_references_readable)
+                comp = get_compound_info(all_references_readable)
                 # save the references
-                non_kegg_refs[compound_id] = comp_data
+                non_kegg_refs[compound_id] = comp
                 non_kegg.append(compound_id)
 
 
@@ -465,12 +472,17 @@ def get_compound_info(info):
         ok = ChEBI()
         res = ok.getCompleteEntity(info['CHEBI'][0]['id'])
         inchi = res.inchi
-        compound_data = Compound.from_inchi_with_keggID('CHEBI', 'xly', inchi)
+        compound = Compound.from_inchi_with_keggID('CHEBI', 'xly', inchi)
 
+        # don't forget to save the mol file
+        if res.ChemicalStructures[0].type == 'mol':
+            compound.molfile = res.ChemicalStructures[0].structure
+        else:
+            raise ValueError
     else:
-        compound_data = None
+        compound = None
 
-    return compound_data
+    return compound
 
 def add_thermo_comp_info(self, cc):
     # check that all CIDs in the reaction are already cached by CC
@@ -483,3 +495,18 @@ def add_thermo_comp_info(self, cc):
         reactions.append(reaction)
 
     self.dG0, self.cov_dG0 = cc.get_dG0_r_multi(reactions,self.separated_by_id_type)
+
+def addHydrogens(input_mol):
+    import openbabel
+
+    obConversion = openbabel.OBConversion()
+    obConversion.SetInAndOutFormats("mol", "pdb")
+
+    mol = openbabel.OBMol()
+    obConversion.ReadString(mol, input_mol)
+    print mol.NumAtoms()
+
+    mol.AddHydrogens()
+    print mol.NumAtoms()
+
+    return obConversion.WriteString(mol)

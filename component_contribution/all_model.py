@@ -4,7 +4,7 @@ from all_reaction import AllReaction
 from kegg_reaction import KeggReaction
 from compound_cacher import KeggCompoundCacher
 from kegg_errors import KeggParseException
-from CfB_functions import separate_S_matrix, _decompose_bigg_reaction, only_decompose
+from CfB_functions import process_input_mets, _decompose_bigg_reaction, only_decompose
 
 class AllModel(object):
     
@@ -16,7 +16,6 @@ class AllModel(object):
         self.cids = cids
         self.rids = rids
         self.format = format
-        self.ccache = KeggCompoundCacher()
 
         assert len(self.cids) == self.S.shape[0]
 
@@ -24,12 +23,13 @@ class AllModel(object):
             assert len(self.rids) == self.S.shape[1]
 
 
-
+        ccache = KeggCompoundCacher()
         # Separate the S matrix in bigg id's and other
-        separated_by_id_type = separate_S_matrix(S,cids)
+        separated_by_id_type = process_input_mets(cids, ccache)
         self.separated_by_id_type = separated_by_id_type
 
         self.cids = separated_by_id_type['output_ids']
+        self.ccache = ccache
 
         # DO THIS FOR OTHER FORMATS AS WELL
         # remove H+ from the stoichiometric matrix if it exists

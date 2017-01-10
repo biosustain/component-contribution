@@ -10,7 +10,7 @@ MAX_PH = 14.0
 class Compound(object):
     
     def __init__(self, database, compound_id, inchi,
-                 atom_bag, pKas, smiles_pH7, majorMSpH7, nHs, zs):
+                 atom_bag, pKas, smiles_pH7, majorMSpH7, nHs, zs, molfile=None):
         self.database = database
         self.compound_id = compound_id
         self.inchi = inchi
@@ -20,6 +20,8 @@ class Compound(object):
         self.majorMSpH7 = majorMSpH7
         self.nHs = nHs
         self.zs = zs
+        self.molfile = molfile
+
 
     @staticmethod
     def from_kegg(compound_id):
