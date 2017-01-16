@@ -32,7 +32,8 @@ class Singleton(type):
         if cls.instance is None:
             cls.instance=super(Singleton,cls).__call__(*args,**kw)
         return cls.instance
-    
+
+
 class KeggCompoundCacher(object):
     """
         CompoundCacher is a singleton that handles caching of Compound objects
@@ -58,7 +59,7 @@ class KeggCompoundCacher(object):
                                    for d in compounds }
         self.need_to_update_cache_file = False
         self.load()
-    
+
     def get_all_compound_ids(self):
         return sorted(self.compound_id2inchi.keys())
     

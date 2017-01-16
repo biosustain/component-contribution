@@ -81,7 +81,7 @@ class AllReaction(object):
             Return:
                 The set of substrates, products and the direction of the reaction
         """
-        tokens = formula.split(arrow)
+        tokens = re.split('<=> | --> ',formula)
         if len(tokens) < 2:
             raise KeggParseException('Reaction does not contain the arrow sign (%s): %s'
                                      % (arrow, formula))

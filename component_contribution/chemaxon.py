@@ -168,6 +168,19 @@ def GetAtomBagAndCharge(molstring):
 
     return atom_bag, formal_charge
 
+def getNonPolarArea(molstring, pH=7):
+    import re
+    """
+        Returns:
+
+    """
+    args = ['msa', '--type', 'ASA_H', '--pH', str(pH)]
+
+    output = RunCxcalc(molstring, args)
+    NPSA = float(re.split('\t|\n', output)[-2])
+
+    return NPSA
+
 if __name__ == "__main__":
     logging.getLogger().setLevel(logging.WARNING)
     from molecule import Molecule

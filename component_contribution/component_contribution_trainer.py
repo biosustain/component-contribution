@@ -5,6 +5,7 @@ from . import inchi2gv
 from .training_data import TrainingData
 from .kegg_reaction import KeggReaction
 from .compound_cacher import KeggCompoundCacher
+from .compound import Compound
 from .thermodynamic_constants import default_T
 from .molecule import Molecule, OpenBabelError
 from .linalg import LINALG
@@ -97,7 +98,7 @@ class ComponentContribution(object):
             except inchi2gv.GroupDecompositionError:
                 return np.nan
 
-    def _decompose_reaction(self, reaction, this):
+    def _decompose_reaction(self, reaction, all_compound_info):
         if self.params is None:
             self.train()
 
@@ -129,8 +130,11 @@ class ComponentContribution(object):
                 if compound_id in self.ccache.compound_dict or compound_id in self.ccache.compound_id2inchi:
                     comp = self.ccache.get_compound(compound_id)
                 else:
-                    comp = this['non_kegg_refs'][compound_id]
-
+                    try:
+                        comp_id = all_compound_info['met_to_comp_dict'][compound_id]
+                        comp = all_compound_info['all_comp_data'][comp_id]
+                    except:
+                        comp = Compound(None, None, None, None, None, None, None, None, None, None)
                 group_vec = self.decomposer.smiles_to_groupvec(comp.smiles_pH7)
                 G_prime.append(group_vec.ToArray())
 
@@ -203,13 +207,13 @@ class ComponentContribution(object):
 
             return dG0_cc, np.sqrt(s_cc_sqr), analysis
 
-    def get_dG0_r_multi(self, reactions, this):
+    def get_dG0_r_multi(self, reactions, comp_data):
         """
             Arguments:
                 reaction - a KeggReaction object
             
             Returns:
-                the CC estimation for this reaction's untransformed dG0 (i.e.
+                the CC estimation for comp_data reaction's untransformed dG0 (i.e.
                 using the major MS at pH 7 for each of the reactants)
 
                 X and G are the decompositions of the reaction into reactions and groups respectively
@@ -217,13 +221,16 @@ class ComponentContribution(object):
         """
         X = []
         G = []
+        no_thermo =[]
+        for reac, reaction in enumerate(reactions):
+            if reac % 50 == 0: print('decomposing: ' + str(reac))
 
-        for reaction in reactions:
             try:
-                x, g = self._decompose_reaction(reaction, this)
+                x, g = self._decompose_reaction(reaction, comp_data)
             except inchi2gv.GroupDecompositionError:
                 x = np.zeros((self.Nc, 1))
                 g = np.zeros((self.params['G'].shape[1], 1))
+                no_thermo.append(reac)
             X.append(list(x.flat))
             G.append(list(g.flat))
         X = np.matrix(X).T
@@ -237,6 +244,7 @@ class ComponentContribution(object):
 
         dG0_cc = X.T * v_r + G.T * v_g
         U = X.T * C1 * X + X.T * C2 * G + G.T * C2.T * X + G.T * C3 * G
+        dG0_cc[no_thermo] = None
 
         return dG0_cc, U
         

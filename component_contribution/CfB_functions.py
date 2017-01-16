@@ -2,9 +2,9 @@ from component_contribution.compound import Compound
 from component_contribution.thermodynamic_constants import default_T
 from component_contribution import inchi2gv
 from component_contribution.kegg_reaction import KeggReaction
-import openbabel, numpy, csv, json, os.path, urllib
+from component_contribution.chemaxon import getNonPolarArea
+import openbabel, numpy, csv, json, os.path, warnings, urllib
 from component_contribution.Chebi_web import ChEBI
-
 
 def check_if_already_exists_inchi(inchi):
 
@@ -207,7 +207,7 @@ def mol_to_inchi_to_cid(mol):
     if cid == None:
         pass
         # gotta cash it!!!
-    return cid, inchi
+    return cid, inchiS
 
 def decompose_without_cache(cc,comp):
 
@@ -335,16 +335,16 @@ def _decompose_bigg_reaction(cc, reaction, bigg_dict):
 
     return x, g, model_ids_to_replace
 
-def process_input_mets(input_ids,ccache):
+def process_input_mets(input_metabolites, ccache):
 
     '''
-    Component contribution as it is written gets all of its information from a cache file that matches up a "kegg id"
+    Component contribution as it is written gets all of its information from a cache file that matches up a "kegg met"
     which means that if we can conveniently use this ID then we should.
 
-    Conversely, in reality all of the group decomposition is based on smiles. if we can not retrieve the kegg id then we
+    Conversely, in reality all of the group decomposition is based on smiles. if we can not retrieve the kegg met then we
     shall do group decomposition with the smiles.
 
-    :param input_ids:
+    :param input_metabolites:
     :return:
     '''
 
@@ -352,82 +352,90 @@ def process_input_mets(input_ids,ccache):
     bigg_dict = load_bigg_dict(filename='../data/bigg_models_metabolites.tsv')
 
     #create variables to save output
-    to_kegg = []
-    to_kegg_dict = {}
-    non_kegg =[]
-    non_kegg_refs ={}
+    met_to_comp_dict = {}
+    non_kegg =[] # this one is used  /all_model.py", line 314, in _get_transform_ddG0
+    all_comp_data ={}
 
-    # map all ids I can to kegg.
-    for compound_id in input_ids:
-        # classifying met. first see if id matches the bigg database
-        all_references_json = bigg_dict.get(compound_id, 'its not bigg')
-        print compound_id
+    # map all ids I can to kegg (or whatever internal ID with Compound info).
+    for met in input_metabolites:
+        # classifying met. first see if met matches the bigg database
+        all_references_json = bigg_dict.get(met, 'its not bigg')
 
-        # if it didn't map, it's not bigg, and we assume it's a mol file
+        # it didn't match bigg, so we assume it's a mol file
         if all_references_json == 'its not bigg':
 
-            if os.path.isfile('../examples/molfiles/' + compound_id):
+            if os.path.isfile('../examples/molfiles/' + met):
                 # read mol file
-                test_file = open('../examples/molfiles/' + compound_id, 'r')
+                test_file = open('../examples/molfiles/' + met, 'r')
                 mol = test_file.read()
                 inchiS = consistent_to_inchi(mol, 'mol')
-                cid, Name = check_if_already_exists_inchi(inchiS)
+                cid=None#, Name = check_if_already_exists_inchi(inchiS)
                 if cid == None:
-                    comp = Compound.from_inchi_with_keggID('MOL', compound_id, inchiS)
+                    comp = Compound.from_inchi_with_keggID('MOL', met, inchiS)
                     comp.molfile = mol
                     # save the references
-                    non_kegg_refs[compound_id] = comp
-                    non_kegg.append(compound_id)
+                    met_to_comp_dict[met] = met
+                    all_comp_data[met] = comp
+                    non_kegg.append(met)
+                    print( met+ ' was inserted as mol file. it had no id mapping to the internal reference. will use input file name')
                 else:
                     comp = ccache.get_compound(cid)
                     comp.molfile = mol
-                    non_kegg_refs[compound_id] = comp
-                    to_kegg_dict[compound_id] = cid
-                    to_kegg.append(compound_id)
+                    all_comp_data[cid] = comp
+                    met_to_comp_dict[met] = cid
+                    print( met+ ' was inserted as mol file. it mapped to the kegg id' + cid)
             else: raise ValueError
 
 
-        # we got a hit so it's a bigg metabolite, lets get either the kegg id or the structure
+        # we got a hit so it's a bigg metabolite, lets get either the kegg met or the structure
         else:
             all_references_readable = json.loads(all_references_json)
 
-            if 'KEGG Compound' in all_references_readable: # we matched it to kegg id and will use component contribution's database for this guy
+            if 'KEGG Compound' in all_references_readable: # we matched it to kegg met and will use component contribution's database for this guy
                 kegg_reference = all_references_readable['KEGG Compound']
                 kegg_id = kegg_reference[0]['id']
-                to_kegg_dict[compound_id] = kegg_id
-                to_kegg.append(compound_id)
-                comp = ccache.get_compound(kegg_id)
-                s_mol = urllib.urlopen('http://rest.kegg.jp/get/cpd:%s/mol' % kegg_id).read()
-                comp.molfile = s_mol
-                non_kegg_refs[compound_id] = comp
+                met_to_comp_dict[met] = kegg_id
+                try:
+                    comp = ccache.get_compound(kegg_id)
+                    # s_mol = urllib.urlopen('http://rest.kegg.jp/get/cpd:%s/mol' % kegg_id).read()
+                    # comp.molfile = s_mol
+                    all_comp_data[kegg_id] = comp
+                    print( met+ ' mapped to the kegg id' + kegg_id)
 
+                except:
+                    print(met + ' had kegg id in the bigg database but wasn\'t in component contribution database')
+                    #comp = get_info_by_mapping(ccache, all_references_readable, met)
+                    comp = None
 
-            else: # bigg id with no kegg id!!!
+            else: # bigg met with no kegg met!!!
                 # get compound info... currently only checks if there is chebi info.
-                comp = get_compound_info(all_references_readable)
-                # save the references
-                non_kegg_refs[compound_id] = comp
-                non_kegg.append(compound_id)
 
+                # comp = get_info_by_mapping(ccache, all_references_readable, met)
+                # all_comp_data[met] = comp
+                # non_kegg.append(met)
+                print(met + ' had no kegg id in the bigg database. it could potentially be found using other databases, but ignoring for now')
+                comp = None
 
     # # now begin to separate the S matrix according to category
-    # S_kegg = S[[input_ids.index(b) for b in to_kegg], :]
-    # S_bigg_non_kegg = S[[input_ids.index(b) for b in bigg_non_kegg],:]
-    # S_non_bigg = S[[input_ids.index(b) for b in non_bigg],:]
+    # S_kegg = S[[input_metabolites.index(b) for b in to_kegg], :]
+    # S_bigg_non_kegg = S[[input_metabolites.index(b) for b in bigg_non_kegg],:]
+    # S_non_bigg = S[[input_metabolites.index(b) for b in non_bigg],:]
 
     # new cids list
-    output_ids = [to_kegg_dict.get(id, id) for id in input_ids]
+    output_ids = [met_to_comp_dict.get(met, met) for met in input_metabolites]
 
-    return { 'to_kegg':to_kegg,
-             'to_kegg_dict':to_kegg_dict,
-             #'S_kegg': S_kegg,
-
+    return {'met_to_comp_dict':met_to_comp_dict,
              'non_kegg':non_kegg,
-             'non_kegg_refs':non_kegg_refs,
-             #'S_bigg_non_kegg':S_bigg_non_kegg,
-
+             'all_comp_data':all_comp_data,
              'output_ids':output_ids}
 
+def get_info_by_mapping(ccache, all_references_readable,met):
+    comp = get_compound_info(ccache, all_references_readable)
+    if comp == None:
+        print(met + ' had no id mapping to the internal reference OR it mapped, but in has no cached comp info')
+    else:
+        print(met + 'had compound information found from mapping databases')
+    return comp
 
 def only_decompose(cc, reactions):
     """
@@ -456,9 +464,149 @@ def only_decompose(cc, reactions):
     G = numpy.matrix(G).T
     return X, G
 
-def get_compound_info(info):
+
+def add_thermo_comp_info(self, cc):
+    # check that all CIDs in the reaction are already cached by CC
+    Nc, Nr = self.S.shape
+    reactions = []
+    for j in xrange(Nr):
+        if j%50==0: print('creating reactions to decompose: '+ str(j))
+        sparse = {self.cids[i]: self.S[i, j] for i in xrange(Nc)
+                  if self.S[i, j] != 0}
+        reaction = KeggReaction(sparse)
+        reactions.append(reaction)
+
+    self.dG0, self.cov_dG0 = cc.get_dG0_r_multi(reactions,self.comp_data)
+
+def addHydrogens(input_mol):
+    import openbabel
+
+    obConversion = openbabel.OBConversion()
+    obConversion.SetInAndOutFormats("mol", "pdb")
+
+    mol_object = openbabel.OBMol()
+    obConversion.ReadString(mol_object, input_mol)
+    print mol_object.NumAtoms()
+
+    mol_object.AddHydrogens()
+    print mol_object.NumAtoms()
+
+    return obConversion.WriteString(mol_object)
+
+def calc_concentration(input_ids, comp_data=None, ccache=None):
     '''
-    this function retrieves the structural information included in info
+    input is the metabolites in the stoichiometric matrix of the thermo model. These are already converted to keggIds
+    :return:
+    '''
+    import math
+    from component_contribution.molecule import Molecule
+    from component_contribution.compound_cacher import KeggCompoundCacher
+    from component_contribution.CfB_functions import process_input_mets
+
+
+    input_ids = list(set(input_ids))
+    hydrogen = [i for i in input_ids if i.startswith('h_') or i.startswith('h2o_')]
+    water = [i for i in input_ids if i.startswith('h2o_')]
+    input_ids = [i for i in input_ids if not i.startswith('h_') and not i.startswith('h2o_')]
+
+    if ccache == None:
+        ccache = KeggCompoundCacher()
+
+    if comp_data == None:
+        comp_data = process_input_mets(input_ids, ccache)
+
+    comp_data_mapper = comp_data['all_comp_data']
+
+    # calc charge and NPSA, and [] for all comps
+    countcharge = {}
+    NPSA = {}
+    concentration = {}
+
+    for input_id,comp in zip(comp_data_mapper.keys(), comp_data_mapper.values()):
+        print input_id
+
+        if comp == None:
+            countcharge[input_id] = None
+            NPSA[input_id] = None
+            concentration[input_id] = None
+            continue
+
+        # calculate charge ##
+
+        # charge calculations work better from smiles
+        if comp.smiles_pH7:
+            smiles_pH7 = comp.smiles_pH7
+            mol = Molecule.FromSmiles(smiles_pH7)
+        else:
+            countcharge[input_id] = None
+            NPSA[input_id] = None
+            concentration[input_id] = None
+            continue
+
+        charge_list = mol.GetAtomCharges()
+        charge_count = sum(x != 0 for x in charge_list)
+        countcharge[input_id] = charge_count
+
+        # calc NPSA ##
+        NPSA1 = getNonPolarArea(comp.inchi, pH=7)
+        NPSA[input_id] = NPSA1
+
+        # old way to calc NPSA
+        # # NPSA calculations work better from mol files
+        # molfile = comp.molfile
+        # mol = Molecule.FromMol(molfile)
+        #
+        # # create the pdb file. in the futre can cache this
+        # test = Molecule._ToFormat(mol.obmol,'pdb')
+        # file_name = "../examples/pdb_files/" + input_id +".pdb" # have to decide what we're going to save all the files as
+        # with open(file_name, "w") as text_file:
+        #     text_file.write(test)
+        #
+        # # load pdb create " soup".     A Soup is essentially a collection of atoms, which we can grab by:
+        # soup = pdbatoms.Soup(file_name)
+        # atoms = soup.atoms()
+        #
+        # # asa - calculates the accessible surface - area of every atom in list of atom, with respect to the other atoms. which  assigns the asa to to each atom.asa
+        # pdbatoms.add_radii(atoms) # this calculates the radius of each atom.
+        # areas = asa.calculate_asa(atoms, 1.4) # 1.4 is the probe i.e. the size of water, changing this can change results ~ 25%
+        # total_area = sum(areas)
+        #
+        # # get atom neighbors
+        # adj = asa.adjacency_list(atoms, 1.8)
+        # adj = [[atoms[c].element for c in at] for at in adj]
+        #
+        # # get polar surface area, i.e. the area contributed by polar atoms only (oxygen, nitrogen and the hydrogen atoms attached to them
+        # polar_area=0
+        # for a, area, adj1 in zip(atoms, areas,adj):
+        #     print a, area
+        #     if a.element in ['O','N']:       # a.bfactor = area
+        #         polar_area += area
+        #     if a.element=='H' and  any([i in ['O','N'] for i in adj1]):
+        #         polar_area += area
+        #
+        # NPSA1 = total_area - polar_area
+
+        conc = math.exp(charge_count*1.0425-NPSA1*0.0272)/1000
+
+        concentration[input_id] = conc
+
+    return concentration, NPSA, countcharge
+
+def remove_duplicate(input_list):
+    repeat = []
+    uniq = []
+    for x in input_list:
+        if x not in uniq:
+            uniq.append(x)
+            # seen.add(x)
+        else:
+            repeat.append(x)
+
+def get_compound_info(ccahce,info):
+    '''
+    this function retrieves the structural information for the references included in the bigg database. this function
+    should no longer be necessary once a proper internal database is generated.
+
     :param info: this is a dictionary including alternative references for a bigg id
     :return:
 
@@ -471,42 +619,23 @@ def get_compound_info(info):
     if 'CHEBI' in info:
         ok = ChEBI()
         res = ok.getCompleteEntity(info['CHEBI'][0]['id'])
-        inchi = res.inchi
-        compound = Compound.from_inchi_with_keggID('CHEBI', 'xly', inchi)
+        try:
+            if res.ChemicalStructures[0].type == 'mol':
+                molfile = res.ChemicalStructures[0].structure
+                cid,inchi = mol_to_inchi_to_cid(molfile)
+                try: compound = ccahce.get_compound(cid)
+                except:
+                    compound = Compound.from_inchi_with_keggID('CHEBI', met, inchi)
+                compound.molfile = molfile
+            else:
+                compound = None
 
-        # don't forget to save the mol file
-        if res.ChemicalStructures[0].type == 'mol':
-            compound.molfile = res.ChemicalStructures[0].structure
-        else:
-            raise ValueError
+        except:
+            try:
+                inchi = res.inchi
+                compound = Compound.from_inchi_with_keggID('CHEBI', met, inchi)
+            except:
+                compound = None
     else:
         compound = None
-
     return compound
-
-def add_thermo_comp_info(self, cc):
-    # check that all CIDs in the reaction are already cached by CC
-    Nc, Nr = self.S.shape
-    reactions = []
-    for j in xrange(Nr):
-        sparse = {self.cids[i]: self.S[i, j] for i in xrange(Nc)
-                  if self.S[i, j] != 0}
-        reaction = KeggReaction(sparse)
-        reactions.append(reaction)
-
-    self.dG0, self.cov_dG0 = cc.get_dG0_r_multi(reactions,self.separated_by_id_type)
-
-def addHydrogens(input_mol):
-    import openbabel
-
-    obConversion = openbabel.OBConversion()
-    obConversion.SetInAndOutFormats("mol", "pdb")
-
-    mol = openbabel.OBMol()
-    obConversion.ReadString(mol, input_mol)
-    print mol.NumAtoms()
-
-    mol.AddHydrogens()
-    print mol.NumAtoms()
-
-    return obConversion.WriteString(mol)
