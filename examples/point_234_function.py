@@ -38,18 +38,12 @@ add_thermo_comp_info(model, cc)
 # Change in Gibbs free energy at a particular pH and ionic strength
 dG0_prime, dG0_std, sqrt_Sigma = model.get_transformed_dG0(pH,I,T)
 
-calculate_conc = True;
 # Concentration matrix (M)
-if calculate_conc == True:
-    conc_M = calc_concentration(model.input_metabolites, model.comp_data, model.ccache)[0]
-else:
-    conc_M = 1e-3 * np.matrix(np.full((len(model.cids), 1), conc_mM))
-# Set Water "concentration" to 1 M
-if 'C00001' in model.cids:
-    conc_M[model.cids.index('C00001'), 0] = 1.0
+conc_M = calc_concentration(True,model.input_metabolites, model.comp_data, model.ccache)[0]
+
 
 # Change in Gibbs free energy accounting for reactant concentration
-dGm_prime = dG0_prime + default_RT * model.S.T * np.log(conc_M)
+dGm_prime = dG0_prime + default_RT * model.Smets.T * np.log(conc_M)
 
 # Critical value for margin of error
 Z = st.norm.ppf(1-(1-conf)/2)

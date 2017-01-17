@@ -369,7 +369,7 @@ def process_input_mets(input_metabolites, ccache):
                 test_file = open('../examples/molfiles/' + met, 'r')
                 mol = test_file.read()
                 inchiS = consistent_to_inchi(mol, 'mol')
-                cid=None#, Name = check_if_already_exists_inchi(inchiS)
+                cid, Name = check_if_already_exists_inchi(inchiS)
                 if cid == None:
                     comp = Compound.from_inchi_with_keggID('MOL', met, inchiS)
                     comp.molfile = mol
@@ -493,7 +493,7 @@ def addHydrogens(input_mol):
 
     return obConversion.WriteString(mol_object)
 
-def calc_concentration(input_ids, comp_data=None, ccache=None):
+def calc_concentration(calculate_conc, input_metabolites, comp_data=None, ccache=None):
     '''
     input is the metabolites in the stoichiometric matrix of the thermo model. These are already converted to keggIds
     :return:
@@ -504,16 +504,19 @@ def calc_concentration(input_ids, comp_data=None, ccache=None):
     from component_contribution.CfB_functions import process_input_mets
 
 
-    input_ids = list(set(input_ids))
-    hydrogen = [i for i in input_ids if i.startswith('h_') or i.startswith('h2o_')]
-    water = [i for i in input_ids if i.startswith('h2o_')]
-    input_ids = [i for i in input_ids if not i.startswith('h_') and not i.startswith('h2o_')]
+    default_C = 0.001
+    conc_M =  numpy.matrix(numpy.full((len(input_metabolites), 1), default_C))
+
+    input_metabolites = list(set(input_metabolites))
+    # hydrogen = [i for i in input_metabolites if i.startswith('h_') or i.startswith('h2o_')]
+    # water = [i for i in input_metabolites if i.startswith('h2o_')]
+    # input_metabolites = [i for i in input_metabolites if not i.startswith('h_') and not i.startswith('h2o_')]
 
     if ccache == None:
         ccache = KeggCompoundCacher()
 
     if comp_data == None:
-        comp_data = process_input_mets(input_ids, ccache)
+        comp_data = process_input_mets(input_metabolites, ccache)
 
     comp_data_mapper = comp_data['all_comp_data']
 
@@ -522,75 +525,101 @@ def calc_concentration(input_ids, comp_data=None, ccache=None):
     NPSA = {}
     concentration = {}
 
-    for input_id,comp in zip(comp_data_mapper.keys(), comp_data_mapper.values()):
-        print input_id
+    for compound_id,comp in zip(comp_data_mapper.keys(), comp_data_mapper.values()):
+        print compound_id
 
         if comp == None:
-            countcharge[input_id] = None
-            NPSA[input_id] = None
-            concentration[input_id] = None
+            countcharge[compound_id] = None
+            NPSA[compound_id] = None
+            concentration[compound_id] = default_C
             continue
 
-        # calculate charge ##
+        # water or H+: putting H as "1" because its log(1)=0 and it will not affect reaction energy
+        if compound_id in ('C00001','C00080'):
+            countcharge[compound_id] = None
+            NPSA[compound_id] = None
+            concentration[compound_id] = 1
+            continue
 
-        # charge calculations work better from smiles
-        if comp.smiles_pH7:
-            smiles_pH7 = comp.smiles_pH7
-            mol = Molecule.FromSmiles(smiles_pH7)
+        # glutamate or glutamine
+        if compound_id in ('C00064', 'C00025'):
+            countcharge[compound_id] = None
+            NPSA[compound_id] = None
+            concentration[compound_id] = 0.1
+            continue
+
+        if calculate_conc:
+            # calculate charge ##
+
+            # charge calculations work better from smiles
+            if comp.smiles_pH7:
+                smiles_pH7 = comp.smiles_pH7
+                mol = Molecule.FromSmiles(smiles_pH7)
+            else:
+                countcharge[compound_id] = None
+                NPSA[compound_id] = None
+                concentration[compound_id] = default_C
+                continue
+
+            charge_list = mol.GetAtomCharges()
+            charge_count = sum(x != 0 for x in charge_list)
+            countcharge[compound_id] = charge_count
+
+            # calc NPSA ##
+            NPSA1 = getNonPolarArea(comp.inchi, pH=7)
+            NPSA[compound_id] = NPSA1
+
+            # old way to calc NPSA
+            # # NPSA calculations work better from mol files
+            # molfile = comp.molfile
+            # mol = Molecule.FromMol(molfile)
+            #
+            # # create the pdb file. in the futre can cache this
+            # test = Molecule._ToFormat(mol.obmol,'pdb')
+            # file_name = "../examples/pdb_files/" + input_id +".pdb" # have to decide what we're going to save all the files as
+            # with open(file_name, "w") as text_file:
+            #     text_file.write(test)
+            #
+            # # load pdb create " soup".     A Soup is essentially a collection of atoms, which we can grab by:
+            # soup = pdbatoms.Soup(file_name)
+            # atoms = soup.atoms()
+            #
+            # # asa - calculates the accessible surface - area of every atom in list of atom, with respect to the other atoms. which  assigns the asa to to each atom.asa
+            # pdbatoms.add_radii(atoms) # this calculates the radius of each atom.
+            # areas = asa.calculate_asa(atoms, 1.4) # 1.4 is the probe i.e. the size of water, changing this can change results ~ 25%
+            # total_area = sum(areas)
+            #
+            # # get atom neighbors
+            # adj = asa.adjacency_list(atoms, 1.8)
+            # adj = [[atoms[c].element for c in at] for at in adj]
+            #
+            # # get polar surface area, i.e. the area contributed by polar atoms only (oxygen, nitrogen and the hydrogen atoms attached to them
+            # polar_area=0
+            # for a, area, adj1 in zip(atoms, areas,adj):
+            #     print a, area
+            #     if a.element in ['O','N']:       # a.bfactor = area
+            #         polar_area += area
+            #     if a.element=='H' and  any([i in ['O','N'] for i in adj1]):
+            #         polar_area += area
+            #
+            # NPSA1 = total_area - polar_area
+
+            conc = math.exp(charge_count*1.0425-NPSA1*0.0272)/1000
+
+            concentration[compound_id] = conc
         else:
-            countcharge[input_id] = None
-            NPSA[input_id] = None
-            concentration[input_id] = None
-            continue
+            countcharge[compound_id] = None
+            NPSA[compound_id] = None
+            concentration[compound_id] = default_C
 
-        charge_list = mol.GetAtomCharges()
-        charge_count = sum(x != 0 for x in charge_list)
-        countcharge[input_id] = charge_count
+    # 1. compounds can have multiple input ids associated.
+    # 2. some input ids have no compounds associated leave them with default concentrations
+    for i, met in enumerate(input_metabolites):
+        comp_id = comp_data['met_to_comp_dict'].get(met, None)
+        if comp_id == None: continue
+        conc_M[i] = concentration[comp_id]
 
-        # calc NPSA ##
-        NPSA1 = getNonPolarArea(comp.inchi, pH=7)
-        NPSA[input_id] = NPSA1
-
-        # old way to calc NPSA
-        # # NPSA calculations work better from mol files
-        # molfile = comp.molfile
-        # mol = Molecule.FromMol(molfile)
-        #
-        # # create the pdb file. in the futre can cache this
-        # test = Molecule._ToFormat(mol.obmol,'pdb')
-        # file_name = "../examples/pdb_files/" + input_id +".pdb" # have to decide what we're going to save all the files as
-        # with open(file_name, "w") as text_file:
-        #     text_file.write(test)
-        #
-        # # load pdb create " soup".     A Soup is essentially a collection of atoms, which we can grab by:
-        # soup = pdbatoms.Soup(file_name)
-        # atoms = soup.atoms()
-        #
-        # # asa - calculates the accessible surface - area of every atom in list of atom, with respect to the other atoms. which  assigns the asa to to each atom.asa
-        # pdbatoms.add_radii(atoms) # this calculates the radius of each atom.
-        # areas = asa.calculate_asa(atoms, 1.4) # 1.4 is the probe i.e. the size of water, changing this can change results ~ 25%
-        # total_area = sum(areas)
-        #
-        # # get atom neighbors
-        # adj = asa.adjacency_list(atoms, 1.8)
-        # adj = [[atoms[c].element for c in at] for at in adj]
-        #
-        # # get polar surface area, i.e. the area contributed by polar atoms only (oxygen, nitrogen and the hydrogen atoms attached to them
-        # polar_area=0
-        # for a, area, adj1 in zip(atoms, areas,adj):
-        #     print a, area
-        #     if a.element in ['O','N']:       # a.bfactor = area
-        #         polar_area += area
-        #     if a.element=='H' and  any([i in ['O','N'] for i in adj1]):
-        #         polar_area += area
-        #
-        # NPSA1 = total_area - polar_area
-
-        conc = math.exp(charge_count*1.0425-NPSA1*0.0272)/1000
-
-        concentration[input_id] = conc
-
-    return concentration, NPSA, countcharge
+    return conc_M, concentration, NPSA, countcharge
 
 def remove_duplicate(input_list):
     repeat = []
