@@ -293,7 +293,7 @@ def load_mnx_file(filename = '../data/chem_prop'):
         mydict = {rows[0]: rows[5] for rows in reader}
     return mydict
 
-def _decompose_bigg_reaction(cc, reaction, bigg_dict):
+def decompose_bigg_reaction(cc, reaction, bigg_dict):
     if cc.params is None:
         cc.train()
 
@@ -384,7 +384,10 @@ def process_input_mets(input_metabolites, ccache):
                     all_comp_data[cid] = comp
                     met_to_comp_dict[met] = cid
                     print( met+ ' was inserted as mol file. it mapped to the kegg id' + cid)
-            else: raise ValueError
+            else:
+                warnings.warn("unexpected metabolite name:" + met)
+                comp = None
+
 
 
         # we got a hit so it's a bigg metabolite, lets get either the kegg met or the structure
@@ -405,14 +408,40 @@ def process_input_mets(input_metabolites, ccache):
                 except:
                     print(met + ' had kegg id in the bigg database but wasn\'t in component contribution database')
                     #comp = get_info_by_mapping(ccache, all_references_readable, met)
-                    comp = None
+                    all_comp_data[kegg_id]  = None
 
             else: # bigg met with no kegg met!!!
-                # get compound info... currently only checks if there is chebi info.
 
+                # get compound info... currently only checks if there is chebi info.
                 # comp = get_info_by_mapping(ccache, all_references_readable, met)
                 # all_comp_data[met] = comp
                 # non_kegg.append(met)
+
+
+                # check if iAF1260 has it
+                #file_name = '../../validation/AF1260supp/all_mol_files/' + met[0:-2] + '.mol'
+                # if os.path.isfile(file_name):
+                #     # read mol file
+                #     test_file = open(file_name, 'r')
+                #     mol = test_file.read()
+                #     inchiS = consistent_to_inchi(mol, 'mol')
+                #     cid, Name = check_if_already_exists_inchi(inchiS)
+                #     if cid == None:
+                #         comp = Compound.from_inchi_with_keggID('MOL', met, inchiS)
+                #         comp.molfile = mol
+                #         # save the references
+                #         met_to_comp_dict[met] = met
+                #         all_comp_data[met] = comp
+                #         non_kegg.append(met)
+                #         print(
+                #             met + ' was inserted as mol file. it had no id mapping to the internal reference. will use input file name')
+                #     else:
+                #         comp = ccache.get_compound(cid)
+                #         comp.molfile = mol
+                #         all_comp_data[cid] = comp
+                #         met_to_comp_dict[met] = cid
+                #         print(met + ' was inserted as mol file. it mapped to the kegg id' + cid)
+
                 print(met + ' had no kegg id in the bigg database. it could potentially be found using other databases, but ignoring for now')
                 comp = None
 
@@ -507,7 +536,6 @@ def calc_concentration(calculate_conc, input_metabolites, comp_data=None, ccache
     default_C = 0.001
     conc_M =  numpy.matrix(numpy.full((len(input_metabolites), 1), default_C))
 
-    input_metabolites = list(set(input_metabolites))
     # hydrogen = [i for i in input_metabolites if i.startswith('h_') or i.startswith('h2o_')]
     # water = [i for i in input_metabolites if i.startswith('h2o_')]
     # input_metabolites = [i for i in input_metabolites if not i.startswith('h_') and not i.startswith('h2o_')]
@@ -534,24 +562,41 @@ def calc_concentration(calculate_conc, input_metabolites, comp_data=None, ccache
             concentration[compound_id] = default_C
             continue
 
-        # water or H+: putting H as "1" because its log(1)=0 and it will not affect reaction energy
+        # water or H+: putting H+ as "1" because its log(1)=0 and it will not affect reaction energy
         if compound_id in ('C00001','C00080'):
             countcharge[compound_id] = None
             NPSA[compound_id] = None
             concentration[compound_id] = 1
             continue
 
-        # glutamate or glutamine
-        if compound_id in ('C00064', 'C00025'):
+        # # glutamate or glutamine
+        # if compound_id in ('C00064', 'C00025'):
+        #     countcharge[compound_id] = None
+        #     NPSA[compound_id] = None
+        #     concentration[compound_id] = 0.02
+        #     continue
+
+
+        # for oxygen and hydrogen use "saturation concentrations for these species in water at 1 atm and 298.15K" feist et al 2007.
+        # values taken from http://www.molecularhydrogenfoundation.org/concentration-and-solubility-of-h2/
+
+        # oxygen
+        if compound_id in ('C00007'):
             countcharge[compound_id] = None
             NPSA[compound_id] = None
-            concentration[compound_id] = 0.1
+            concentration[compound_id] = 0.000055
             continue
+
+        # molecular hydrogen
+        if compound_id in ('C00282'):
+            countcharge[compound_id] = None
+            NPSA[compound_id] = None
+            concentration[compound_id] = 0.000034
+            continue
+
 
         if calculate_conc:
             # calculate charge ##
-
-            # charge calculations work better from smiles
             if comp.smiles_pH7:
                 smiles_pH7 = comp.smiles_pH7
                 mol = Molecule.FromSmiles(smiles_pH7)
@@ -668,3 +713,71 @@ def get_compound_info(ccahce,info):
     else:
         compound = None
     return compound
+
+def output_reaction_energies(in_filename,pH=7,I=0.1,out_filename='test'):
+    import numpy as np
+    import scipy.stats as st
+    from component_contribution.thermodynamic_constants import default_RT
+    from component_contribution.component_contribution_trainer import ComponentContribution
+    from component_contribution.all_model import AllModel
+    import os
+
+    # Physiological conditions
+    T = 298.15     # temperature    (K)
+
+    # Confidence level
+    conf = 0.95
+
+    # INPUT Reactions as file or string of MOL files
+    example_path = os.path.dirname(os.path.realpath(__file__))
+    with open(in_filename, 'r') as fp:
+    #with open('../examples/example_bigg_id', 'r') as fp:
+
+        reaction_strings = fp.readlines()
+
+    # Parse the reaction strings into a "KEGG" model
+    model = AllModel.from_formulas(reaction_strings, 'bigg', raise_exception=False)
+
+    # Train component-contribution predictive model
+    cc = ComponentContribution.init()
+
+    # Add the component-contribution estimation for reaction's untransformed dG0
+    # (i.e. using major MS at pH 7 for each of the reactants)
+    # model.add_thermo(cc)
+
+
+    add_thermo_comp_info(model, cc)
+
+    # Change in Gibbs free energy at a particular pH and ionic strength
+    dG0_prime, dG0_std, sqrt_Sigma = model.get_transformed_dG0(pH,I,T)
+
+    # Concentration matrix (M)
+    conc_M = calc_concentration(False,model.input_metabolites, model.comp_data, model.ccache)[0]
+
+
+    # Change in Gibbs free energy accounting for reactant concentration
+    dGm_prime = dG0_prime + default_RT * model.Smets.T * np.log(conc_M)
+
+    # Critical value for margin of error
+    Z = st.norm.ppf(1-(1-conf)/2)
+
+
+    # have to decide what we're going to save all the files as
+    with open(out_filename, "w") as text_file:
+        text_file.write('reaction formula' + '\t' + 'model.dG0' + '\t' + 'dG0_prime' + '\t' + 'dGm_prime' + '\t' + 'dG0_std' + '\n')
+
+        for i, rxn_str in enumerate(reaction_strings):
+            print '-' * 60
+            print rxn_str.strip()
+            # Change in Gibbs free energy in standard conditions
+            print "dG0  = %8.1f +- %5.1f kj/mol" % (model.dG0[i, 0], dG0_std[i, 0] * Z)
+            # Change in Gibbs free energy at a particular pH and ionic strength
+            print "dG'0 = %8.1f +- %5.1f kj/mol" % (dG0_prime[i, 0], dG0_std[i, 0] * Z)
+            # Change in Gibbs free energy accounting for reactant concentration
+            print "dG'm = %8.1f +- %5.1f kj/mol" % (dGm_prime[i, 0], dG0_std[i, 0] * Z)
+
+            text_file.write(rxn_str.strip() + '\t' +
+                            str(model.dG0[i, 0]) + '\t' +
+                            str(dG0_prime[i, 0]) + '\t' +
+                            str(dGm_prime[i, 0]) + '\t' +
+                            str(dG0_std[i, 0]*Z) + '\n')

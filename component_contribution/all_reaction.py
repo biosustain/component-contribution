@@ -160,11 +160,11 @@ class AllReaction(object):
                         atom_bag[str(elements[j])] = c
             return atom_bag
             
-        except ValueError as e:
+        except:
             if raise_exception:
-                raise e
+                raise ValueError
             else:
-                logging.debug(str(e))
+                logging.debug(str(ValueError('could not balance reaction' + str(self))))
                 return None
 
     def is_balanced(self, fix_water=False, raise_exception=False):

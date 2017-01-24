@@ -4,7 +4,7 @@ from all_reaction import AllReaction
 from kegg_reaction import KeggReaction
 from compound_cacher import KeggCompoundCacher
 from kegg_errors import KeggParseException
-from CfB_functions import process_input_mets, _decompose_bigg_reaction, only_decompose
+from CfB_functions import process_input_mets, decompose_bigg_reaction, only_decompose
 
 class AllModel(object):
 
@@ -297,7 +297,7 @@ class AllModel(object):
         # do for smile
         try:
             if True:
-                x, g, model_ids_to_replace_per_reac = _decompose_bigg_reaction(self, reaction, bigg_dict)
+                x, g, model_ids_to_replace_per_reac = decompose_bigg_reaction(self, reaction, bigg_dict)
 
             else:
                 x, g = self._decompose_reaction(reaction)

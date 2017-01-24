@@ -1,3 +1,9 @@
+# This script is an example of how we would calculate the gibbs formation of a compound. the input file contains
+# reactions with single metabolites on the product side.
+
+# this method is not recommended by Elad Noor and Ron Milo.
+
+
 import numpy as np
 import scipy.stats as st
 from component_contribution.thermodynamic_constants import default_RT
@@ -17,7 +23,6 @@ conf = 0.95
 
 # INPUT Reactions as file or string of MOL files
 example_path = os.path.dirname(os.path.realpath(__file__))
-# with open('../../validation/allreacs_edited.txt', 'r') as fp:
 with open('../examples/example_bigg_mets', 'r') as fp:
 
     reaction_strings = fp.readlines()

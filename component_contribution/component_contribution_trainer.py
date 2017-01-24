@@ -9,7 +9,6 @@ from .compound import Compound
 from .thermodynamic_constants import default_T
 from .molecule import Molecule, OpenBabelError
 from .linalg import LINALG
-from .CfB_functions import _decompose_bigg_reaction, load_bigg_dict
 
 base_path = os.path.split(os.path.realpath(__file__))[0]
 CC_CACHE_FNAME = os.path.join(base_path, '../cache/component_contribution_python.mat')
