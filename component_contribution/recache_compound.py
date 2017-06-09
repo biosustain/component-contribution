@@ -5,11 +5,11 @@ Created on Thu Aug  7 21:00:31 2014
 @author: eladn
 """
 import sys
-from compound_cacher import CompoundCacher
+from compound_cacher import KeggCompoundCacher
 
 compound_id = sys.argv[1]
-CompoundCacher.RebuildCompoundJSON()
-ccache = CompoundCacher()
+KeggCompoundCacher.RebuildCompoundJSON()
+ccache = KeggCompoundCacher()
 sys.stderr.write('removing %s from cache ...\n' % compound_id)
 ccache.remove(compound_id)
 sys.stderr.write('recalculating SMILES and pKa values ...\n')

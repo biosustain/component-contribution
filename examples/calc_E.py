@@ -19,7 +19,7 @@ formula = 'C00149 <=> C00036'
 #formula = 'C00003 + C00282 <=> C00004'
 #############################################################################
 reaction = KeggReaction.parse_formula(formula)
-reaction_atom_bag = reaction._get_reaction_atom_bag()
+reaction_atom_bag = reaction._get_kegg_reaction_atom_bag()
 n_e = 0
 if 'e-' in reaction_atom_bag:
     n_e = reaction_atom_bag['e-']

@@ -1,10 +1,10 @@
 import csv, os
 import numpy as np
-import matplotlib.pyplot as plt
-from python.component_contribution import ComponentContribution
-from python.kegg_model import KeggModel
+#import matplotlib.pyplot as plt
+from component_contribution.component_contribution_trainer import ComponentContribution
+from component_contribution.kegg_model import KeggModel
 
-REPORT_CACHE_FNAME = 'cache/report_gc.csv'
+REPORT_CACHE_FNAME = '../cache/report_gc.csv'
 cid2dG0 = {}
 if not os.path.exists(REPORT_CACHE_FNAME):
     fp = open(REPORT_CACHE_FNAME, 'w')
@@ -22,7 +22,7 @@ else:
 
 REACTION_FNAME = 'tests/report_gc_reactions.txt'
 reaction_strings = open(REACTION_FNAME, 'r').readlines()
-model = KeggModel.from_formulas(reaction_strings)    
+model = KeggModel.from_kegg_formulas(reaction_strings)
 
 # compare the dG0_r of the model to the one we get if multiplying
 # the model stoichiometric matrix by the formation energies

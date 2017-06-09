@@ -1,7 +1,7 @@
 import re
 import numpy as np
 import logging
-from compound_cacher import CompoundCacher
+from component_contribution.compound_cacher import KeggCompoundCacher
 from kegg_errors import KeggParseException
 
 class KeggReaction(object):
@@ -13,7 +13,8 @@ class KeggReaction(object):
         self.sparse = dict(filter(lambda (k,v):v, sparse.items()))
         self.arrow = arrow
         self.rid = rid
-        self.ccache = CompoundCacher()
+        self.ccache = KeggCompoundCacher()
+        self.format = 'kegg'
 
     def keys(self):
         return self.sparse.keys()
@@ -113,7 +114,7 @@ class KeggReaction(object):
                 right.append(KeggReaction.write_compound_and_coeff(cid, coeff))
         return "%s %s %s" % (' + '.join(left), self.arrow, ' + '.join(right))
 
-    def _get_reaction_atom_bag(self, raise_exception=False):
+    def _get_kegg_reaction_atom_bag(self, raise_exception=False):
         """
             Use for checking if all elements are conserved.
             
@@ -162,7 +163,7 @@ class KeggReaction(object):
                 return None
 
     def is_balanced(self, fix_water=False, raise_exception=False):
-        reaction_atom_bag = self._get_reaction_atom_bag(raise_exception)
+        reaction_atom_bag = self._get_kegg_reaction_atom_bag(raise_exception)
 
         if reaction_atom_bag is None: # this means some compound formulas are missing
             return False
@@ -172,7 +173,7 @@ class KeggReaction(object):
             self.sparse['C00001'] += -reaction_atom_bag['O']
             if self.sparse['C00001'] == 0:
                 del self.sparse['C00001']
-            reaction_atom_bag = self._get_reaction_atom_bag()
+            reaction_atom_bag = self._get_kegg_reaction_atom_bag()
 
         return len(reaction_atom_bag) == 0
 
@@ -203,4 +204,4 @@ class KeggReaction(object):
         
 if __name__ == '__main__':
     reaction = KeggReaction.parse_formula('C00149 <=> C00036')
-    print reaction._get_reaction_atom_bag()
+    print reaction._get_kegg_reaction_atom_bag()

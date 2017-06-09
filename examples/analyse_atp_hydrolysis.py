@@ -2,9 +2,9 @@ import logging, csv
 import numpy as np
 logger = logging.getLogger('')
 logger.setLevel(logging.INFO)
-from python.component_contribution import ComponentContribution
-from python.kegg_reaction import KeggReaction
-from python.training_data import TrainingData
+from component_contribution.component_contribution_trainer import ComponentContribution
+from component_contribution.kegg_reaction import KeggReaction
+from component_contribution.training_data import TrainingData
 
 def main():
 
@@ -18,7 +18,7 @@ def main():
     ############################################################################
 
     #reaction = KeggReaction.parse_formula('C00002 + C00001 <=> C00008 + C00009'); fname = 'atpase';
-    reaction = KeggReaction.parse_formula('C00149 <=> C00122 + C00001'); fname = 'fumarase';
+    reaction = KeggReaction.parse_formula('C00149 <=> C00122 + C00001'); fname = 'empty';
 
     x, g = cc._decompose_reaction(reaction)
     weights_rc = (x.T * G1).round(5)
@@ -27,7 +27,7 @@ def main():
     orders = sorted(range(weights.shape[1]),
                     key=lambda j:abs(weights[0, j]), reverse=True)
 
-    output = csv.writer(open('res/%s_analysis.csv' % fname, 'w'))
+    output = csv.writer(open('%s_analysis.csv' % fname, 'w'))
     output.writerow(('Weight', 'dG\'0', 'dG0', 'reference', 'reaction'))
     for j in orders:
         if abs(weights[0, j]) < 1e-7:

@@ -7,7 +7,8 @@ if platform.system() == 'Windows':
     CXCALC_BIN = 'C:\\Program Files (x86)\\ChemAxon\\MarvinBeans\\bin\\cxcalc.bat'
     use_shell_for_echo = True
 else:
-    CXCALC_BIN = 'cxcalc'
+    # CXCALC_BIN = 'cxcalc'
+    CXCALC_BIN = '/Applications/ChemAxon/JChemSuite/bin/cxcalc'
     use_shell_for_echo = False
 
 MID_PH = 7.0
@@ -166,6 +167,19 @@ def GetAtomBagAndCharge(molstring):
     atom_bag['e-'] = n_protons - formal_charge
 
     return atom_bag, formal_charge
+
+def getNonPolarArea(molstring, pH=7):
+    import re
+    """
+        Returns:
+
+    """
+    args = ['msa', '--type', 'ASA_H', '--pH', str(pH)]
+
+    output = RunCxcalc(molstring, args)
+    NPSA = float(re.split('\t|\n', output)[-2])
+
+    return NPSA
 
 if __name__ == "__main__":
     logging.getLogger().setLevel(logging.WARNING)

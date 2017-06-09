@@ -1,11 +1,11 @@
 import logging, os, csv
-from .component_contribution_trainer import ComponentContribution
-from .thermodynamic_constants import default_T
+from component_contribution.component_contribution_trainer import ComponentContribution
+from component_contribution.thermodynamic_constants import default_T
 
 if not os.path.isdir('res'):
     os.mkdir('res')
 
-OUTPUT_CSV = 'res/cc_compounds.csv'
+OUTPUT_CSV = 'cc_compounds.csv'
 
 if __name__ == '__main__':
     logger = logging.getLogger('')

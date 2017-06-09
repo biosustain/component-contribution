@@ -1,9 +1,35 @@
-component-contribution
-======================
+README for CfB Component contribution.
 
-Standard reaction Gibbs energy estimation for biochemical reactions
+This package is a fork of https://github.com/eladnoor/component-contribution
 
-### Requirements (for the python version):
+It is modified to take as inputs biochemical reactions written in bigg_ids and molfiles. It includes example scripts covering the points of the contract and are listed below:
+
+
+
+point_21_function: this script demostrates accomplishment of point 2.1: Gibbs formation calculation
+
+point_22_function: this script demostrates accomplishment of point 2.2: Gibbs reaction calculation
+	This script exemplifies how the reaction gibbs energy can be calculated for any biochemical reaction that is made up of bigg_ids and mol files. when a metabolite is a mol file, the metabolite id in the reaction is its file name and the mol file must be in examples/molfiles (this can be edited in the function process_input_mets)
+
+
+point_23_4_function: this script demostrates accomplishment of point 2.3 and 2.4: it estimates the concentration of the metabolites to improve reaction energy predictions.
+	This script calls the function "output_reaction_energies" which takes an input text file with all the reactions one would like to calculate gibbs reaction energy for, the pH, Ionic strength, and the file name to output the resulting information. the written text file will include the columns: reaction formula	model.dG0	dG0_prime	dGm_prime	dG0_std
+
+	Inside the "output_reaction_energies" is the calc_concentration function. If the first input to this function is True, it will calculate the concetration based on the metabolite structural properties like in Bar-Even 2011. If False, it will output 1 millimolar for almost all metabolites (see code for exceptions)
+
+	This script runs output_reaction_energies four times on the whole iAF1260 model in four different conditions to then be compared with the  Thermo data in that model. output files are generated in examples/
+
+point_25: this script demostrates accomplishment of point 2.5: validation of the method
+	This script runs the validation against the feist data. it takes precalculated data from "point_23_4_function" and just does some filtering to properly match with Fiest data. RESULTS ARE THEN MANUALLY COMPILED IN THE SPREADSHEET "compile_point25" in the examples folder
+
+point_25internal: this script demostrates accomplishment of point 2.5: validation of the method
+	This script compares CfB's version of component contribution with equilibrator. Up until line 44 this script only takes '../../validation/internal/kegg_reactions', a text file with all kegg reactions and transforms it to '../../validation/internal/kegg_to_met_reactions' which replaces metabolite names with bigg_ids.
+	The last line actually calls the function to calculate reaction gibbs energy as in point_23_4. The resulting data was compiled in the spreadsheet "equilibrator_reaction_energies" in validation/internal/
+
+
+==========================
+
+### Requirements:
 * python == 2.7
 * numpy >= 1.6.2
 * scipy >= 0.14
@@ -11,60 +37,6 @@ Standard reaction Gibbs energy estimation for biochemical reactions
 * Open-Babel >= 2.3.1
 * ChemAxon's Marvin >= 5.11
 
-### Requirements (for the MATLAB version):
-* Matlab >= 7
-* python == 2.7
-* numpy >= 1.6.2
-* scipy >= 0.14
-* Open-Babel >= 2.3.1 ('babel' must be in PATH, including python bindings)
-* ChemAxon's Marvin >= 5.11 ('cxcalc' must be in PATH)
-
-For more information on the method behind component-contribution, please view our open access paper:
-
-Noor E, Haraldsdóttir HS, Milo R, Fleming RMT (2013)
-[Consistent Estimation of Gibbs Energy Using Component Contributions](http://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1003098),
-PLoS Comput Biol 9:e1003098, DOI: 10.1371/journal.pcbi.1003098
-
-Please, quote this paper if you publish work that uses component-contribution.
-
-## Description of files in /data
-* compounds.tsv - table of all KEGG compounds, their name and InChI (used only in Matlab code)
-* fixed_mapping.tsv - table mapping some KEGG compound IDs to BiGG IDs (overriding the InChI-based mapping)
-* formation_energies_transformed.tsv - table of biochemical formation energies (used for training CC)
-* kegg_additions.tsv - table of compounds that are missing from KEGG together with their InChI
-* kegg_compounds.json.gz - JSON of all KEGG compounds including their InChI and names
-* redox.tsv - table of reduction potentials (used for training CC)
-* TECRDB.tsv - table of K'eq values from the NIST database (http://xpdb.nist.gov/enzyme_thermodynamics/)
-
-## Installing on Windows
-1. install 32-bit python2.7
-  * recommended version [Winpython](http://winpython.github.io)
-  * you must install the 32-bit version since OpenBabel is not compiled for 64-bit windows
-  * make sure to register the python interpreter before installing openbabel python bindings
-  * add `python.exe` to PATH: [instructions](http://docs.python.org/2/using/windows.html#excursus-setting-environment-variables)
-2. install OpenBabel (version 2.3.2)
-  * [instructions](http://openbabel.org/wiki/Category:Installation)
-  * [installer](http://sourceforge.net/projects/openbabel/files/openbabel/2.3.2/OpenBabel2.3.2a_Windows_Installer.exe/download)
-3. install OpenBabel python (version 1.8) bindings
-  * [instructions](http://open-babel.readthedocs.org/en/latest/UseTheLibrary/PythonInstall.html#windows)
-  * [installer](http://sourceforge.net/projects/openbabel/files/openbabel-python/1.8/openbabel-python-1.8.py27.exe/download)
-4. optional: install Octave
-  * Not required for the Matlab version of component-contribution
-  * [instructions](http://blink1073.github.io/oct2py/source/installation.html)
-  * there is no need to use "pip" to install oct2py as it is already part of winpython
-  * [installer](http://sourceforge.net/projects/octave/files/Octave%20Windows%20binaries/)
-  * add `octave.exe` to PATH
-5. optional: install "Marvin Suite" by ChemAxon
-  * Marvin is only required for adding structures of new compounds that are not in the KEGG database
-  * [instructions](http://www.chemaxon.com/download/marvin-suite/)
-  * add `cxcalc.bat` to PATH
-  * you will need to get a license to use ChemAxon (it is free for academic use)
-
-## Installing on Ubuntu
-1. as root: `apt-get install openbabel octave`
-2. as root: `pip install -U numpy scipy oct2py`
-3. optional: install "Marvin Suite" by ChemAxon
-  * Marvin is only required for adding structures of new compounds that are not in the KEGG database
-  * [instructions](http://www.chemaxon.com/download/marvin-suite/)
-  * add `cxcalc` to PATH, e.g. using a symbolic link from `/usr/bin/cxcalc`
-  * you will need to get a license to use ChemAxon (it is free for academic use)
+in addition need the following
+Pandas: to run script point_25
+chebi_web: to translate bigg to kegg via chebi. this is commented out for now.

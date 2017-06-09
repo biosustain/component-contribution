@@ -4,7 +4,8 @@ from scipy.io import savemat, loadmat
 from . import inchi2gv
 from .training_data import TrainingData
 from .kegg_reaction import KeggReaction
-from .compound_cacher import CompoundCacher
+from .compound_cacher import KeggCompoundCacher
+from .compound import Compound
 from .thermodynamic_constants import default_T
 from .molecule import Molecule, OpenBabelError
 from .linalg import LINALG
@@ -16,6 +17,8 @@ class ComponentContribution(object):
 
     def __init__(self, training_data=None):
         if training_data is None:
+
+            # load all the experimental data, remove unbalanced reactions, and reverse transform to get the dG0
             training_data = TrainingData()
 
         self.train_cids = list(training_data.cids)
@@ -30,7 +33,7 @@ class ComponentContribution(object):
         self.train_G = None
         self.params = None
 
-        self.ccache = CompoundCacher()
+        self.ccache = KeggCompoundCacher()
         self.groups_data = inchi2gv.init_groups_data()
         self.decomposer = inchi2gv.InChIDecomposer(self.groups_data)
         self.group_names = self.groups_data.GetGroupNames()
@@ -58,7 +61,7 @@ class ComponentContribution(object):
     @staticmethod
     def from_matfile(file_name, training_data=None):
         cc = ComponentContribution(training_data=training_data)
-        cc.params = loadmat(file_name)
+        cc.params = loadmat(file_name) #DATAINPUT
         return cc
     
     def get_major_ms_dG0_f(self, compound_id):
@@ -94,10 +97,11 @@ class ComponentContribution(object):
             except inchi2gv.GroupDecompositionError:
                 return np.nan
 
-    def _decompose_reaction(self, reaction):
+    def _decompose_reaction(self, reaction, all_compound_info):
         if self.params is None:
             self.train()
-        
+
+        # load all cid's in the database, and G is all the groups in the cids_joined (reactants used to train)
         cids = list(self.params['cids'])
         G = self.params['G']
 
@@ -108,20 +112,28 @@ class ComponentContribution(object):
         G_prime = []
 
         for compound_id, coeff in reaction.iteritems():
-            if compound_id in self.cids_joined:
+            if compound_id in self.cids_joined: # cids_joined is the list of cid used in the training data
                 i = cids.index(compound_id)
                 x[i, 0] = coeff
             else:
                 # Decompose the compound and calculate the 'formation energy'
                 # using the group contributions.
-                # Note that the length of the group contribution vector we get 
-                # from CC is longer than the number of groups in "groups_data" 
-                # since we artifically added fictive groups to represent all the 
-                # non-decomposable compounds. Therefore, we truncate the 
+                # Note that the length of the group contribution vector we get
+                # from CC is longer than the number of groups in "groups_data"
+                # since we artifically added fictive groups to represent all the
+                # non-decomposable compounds. Therefore, we truncate the
                 # dG0_gc vector since here we only use GC for compounds which
                 # are not in cids_joined anyway.
                 x_prime.append(coeff)
-                comp = self.ccache.get_compound(compound_id)
+
+                if compound_id in self.ccache.compound_dict or compound_id in self.ccache.compound_id2inchi:
+                    comp = self.ccache.get_compound(compound_id)
+                else:
+                    try:
+                        comp_id = all_compound_info['met_to_comp_dict'][compound_id]
+                        comp = all_compound_info['all_comp_data'][comp_id]
+                    except:
+                        comp = Compound(None, None, None, None, None, None, None, None, None, None)
                 group_vec = self.decomposer.smiles_to_groupvec(comp.smiles_pH7)
                 G_prime.append(group_vec.ToArray())
 
@@ -130,7 +142,7 @@ class ComponentContribution(object):
         else:
             g = np.matrix(np.zeros((1, 1)))
 
-        g.resize((G.shape[1], 1))
+        g.resize((G.shape[1], 1), refcheck=False)# here
 
         return x, g
 
@@ -194,23 +206,30 @@ class ComponentContribution(object):
 
             return dG0_cc, np.sqrt(s_cc_sqr), analysis
 
-    def get_dG0_r_multi(self, reactions):
+    def get_dG0_r_multi(self, reactions, comp_data):
         """
             Arguments:
                 reaction - a KeggReaction object
             
             Returns:
-                the CC estimation for this reaction's untransformed dG0 (i.e.
+                the CC estimation for comp_data reaction's untransformed dG0 (i.e.
                 using the major MS at pH 7 for each of the reactants)
+
+                X and G are the decompositions of the reaction into reactions and groups respectively
+                eq.10 in the paper
         """
         X = []
         G = []
-        for reaction in reactions:
+        no_thermo =[]
+        for reac, reaction in enumerate(reactions):
+            if reac % 50 == 0: print('decomposing: ' + str(reac))
+
             try:
-                x, g = self._decompose_reaction(reaction)
+                x, g = self._decompose_reaction(reaction, comp_data)
             except inchi2gv.GroupDecompositionError:
                 x = np.zeros((self.Nc, 1))
                 g = np.zeros((self.params['G'].shape[1], 1))
+                no_thermo.append(reac)
             X.append(list(x.flat))
             G.append(list(g.flat))
         X = np.matrix(X).T
@@ -224,6 +243,8 @@ class ComponentContribution(object):
 
         dG0_cc = X.T * v_r + G.T * v_g
         U = X.T * C1 * X + X.T * C2 * G + G.T * C2.T * X + G.T * C3 * G
+        dG0_cc[no_thermo] = None
+
         return dG0_cc, U
         
     def get_compound_json(self, compound_id):

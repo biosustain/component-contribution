@@ -10,7 +10,7 @@ MAX_PH = 14.0
 class Compound(object):
     
     def __init__(self, database, compound_id, inchi,
-                 atom_bag, pKas, smiles_pH7, majorMSpH7, nHs, zs):
+                 atom_bag, pKas, smiles_pH7, majorMSpH7, nHs, zs, molfile=None):
         self.database = database
         self.compound_id = compound_id
         self.inchi = inchi
@@ -20,14 +20,15 @@ class Compound(object):
         self.majorMSpH7 = majorMSpH7
         self.nHs = nHs
         self.zs = zs
-    
-    @staticmethod
-    def from_kegg(compound_id):
-        return Compound.from_inchi('KEGG', compound_id,
-                                   Compound.get_inchi(compound_id))
+        self.molfile = molfile
+
 
     @staticmethod
-    def from_inchi(database, compound_id, inchi):
+    def from_kegg(compound_id):
+        return Compound.from_inchi_with_keggID('KEGG', compound_id, Compound.get_inchi_from_kegg(compound_id))
+
+    @staticmethod
+    def from_inchi_with_keggID(database, compound_id, inchi):
         if compound_id == 'C00080':
             # We add an exception for H+ (and put nH = 0) in order to eliminate
             # its effect of the Legendre transform
@@ -145,7 +146,7 @@ class Compound(object):
                         d['nHs'], d['zs'])
 
     @staticmethod
-    def get_inchi(compound_id):
+    def get_inchi_from_kegg(compound_id):
         s_mol = urllib.urlopen('http://rest.kegg.jp/get/cpd:%s/mol' % compound_id).read()
         return Compound.mol2inchi(s_mol)
 
@@ -274,13 +275,23 @@ class Compound(object):
         else:
             return -sum(self.pKas[i_to:i_from]) * R * T * np.log(10)
 
+    def get_transform(self, pH, I, T):
+        """
+            Returns the difference in kJ/mol between dG'0 and the dG0 of the
+            MS with index 'i'.
+
+            Returns:
+            (molelcule dG'0 - sp. dG0[0])
+        """
+        return self._transform(pH, I, T)
+
     def transform(self, i, pH, I, T):
         """
             Returns the difference in kJ/mol between dG'0 and the dG0 of the 
             MS with index 'i'.
             
             Returns:
-                (dG'0 - dG0[0]) + (dG0[0] - dG0[i])  = dG'0 - dG0[i]
+            (molelcule dG'0 - sp. dG0[0]) + (sp. dG0[0] - sp. dG0[i]) = molecule dG'0 - sp. dG0[i]
         """
         return self._transform(pH, I, T) + self._ddG(0, i, T)
 

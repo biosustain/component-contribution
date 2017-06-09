@@ -2,7 +2,7 @@ import os, logging, csv
 import numpy as np
 from scipy.io import savemat
 from .thermodynamic_constants import R, F
-from .compound_cacher import CompoundCacher
+from .compound_cacher import KeggCompoundCacher
 from .kegg_reaction import KeggReaction
 
 class TrainingData(object):
@@ -17,10 +17,15 @@ class TrainingData(object):
         self.ccache.dump()
 
     def __init__(self):
-        self.ccache = CompoundCacher()
-        
+        self.ccache = KeggCompoundCacher()
+
+        # this loads all the training data and returns is as a dict in thermo_params.
+        # it also defines which metabolites not to decompose, there are some metabolites for which there are formation
+        # energies, but they are still decomposed.
         thermo_params, self.cids_that_dont_decompose = TrainingData.get_all_thermo_params()
-        
+
+        # cids is a set of all the cids used in the training data this is saved as cids_joined outside
+        # this function (inside ComponentContribution() )
         cids = set()
         for d in thermo_params:
             cids = cids.union(d['reaction'].keys())
@@ -30,8 +35,8 @@ class TrainingData(object):
         # stoichiometric matrix, where the rows (compounds) are according to the
         # CID list 'cids'.
         self.S = np.zeros((len(cids), len(thermo_params)))
-        for k, d in enumerate(thermo_params):
-            for cid, coeff in d['reaction'].iteritems():
+        for k, a in enumerate(thermo_params):
+            for cid, coeff in a['reaction'].iteritems():
                 self.S[cids.index(cid), k] = coeff
             
         self.cids = cids
@@ -47,8 +52,11 @@ class TrainingData(object):
         rxn_inds_to_balance = [i for i in xrange(len(thermo_params))
                                if thermo_params[i]['balance']]
 
+        # train only on those reactions that are elementally balanced. if O is missing, adds water.
         self.balance_reactions(rxn_inds_to_balance)
-        
+
+        # this corrects for the non - standard condition in which the experimental data where measured.
+        # It back calculates dG0 saved in self.dG0
         self.reverse_transform()
 
     def savemat(self, file_name):
@@ -188,6 +196,9 @@ class TrainingData(object):
     
     @staticmethod
     def get_all_thermo_params():
+        # this loads all the training data and returns is as a dict in thermo_params.
+        # it also defines which metabolites not to decompose, there are some metabolites for which there are formation
+        # energies, but they are still decomposed.
         base_path = os.path.split(os.path.realpath(__file__))[0]
     
         fname, weight = TrainingData.FNAME_DICT['TECRDB']
@@ -232,7 +243,8 @@ class TrainingData(object):
         
         rxn_inds_to_remove = [k for k in rxn_inds_to_balance 
                               if np.any(conserved[:, k] != 0, 0)]
-        
+
+        # create an output in the logging file. is all this indexing necessary?
         for k in rxn_inds_to_remove:
             sprs = {}
             for i in np.nonzero(self.S[:, k])[0]:
@@ -267,6 +279,8 @@ class TrainingData(object):
     def reverse_transform(self):
         """
             Calculate the reverse transform for all reactions in training_data.
+            the training data gives us dG0', to reverse transform each reaction (i) we correct each individual
+            compound (j) and then we add them
         """
         n_rxns = self.S.shape[1]
         reverse_ddG0 = np.zeros(n_rxns)
