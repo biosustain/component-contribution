@@ -737,15 +737,15 @@ class GroupDecomposer(object):
         return GroupDecomposer(gd)
 
     @staticmethod
-    def _RingedPChainSmarts(length):
+    def _ringed_p_chain_smarts(length):
         return ''.join(['[C,S][O;R1]', '[P;R1](=O)([OH,O-])[O;R1]' * length, '[C,S]'])
 
     @staticmethod
-    def _InternalPChainSmarts(length):
+    def _internal_p_chain_smarts(length):
         return ''.join(['[C,S][O;R0]', '[P;R0](=O)([OH,O-])[O;R0]' * length, '[C,S]'])
     
     @staticmethod
-    def _TerminalPChainSmarts(length):
+    def _terminal_p_chain_smarts(length):
         return ''.join(['[OH,O-]', 'P(=O)([OH,O-])O' * length, '[C,S]'])
 
     @staticmethod
@@ -838,7 +838,7 @@ class GroupDecomposer(object):
         # For each allowed length
         for length in range(1, max_length + 1):
             # Find internal phosphate chains (ones in the middle of the molecule).
-            smarts_str = GroupDecomposer._RingedPChainSmarts(length)
+            smarts_str = GroupDecomposer._ringed_p_chain_smarts(length)
             chain_map = dict((k, []) for (k, _) in group_map.items())
             for pchain in mol.find_smarts(smarts_str):
                 working_pchain = list(pchain)
@@ -860,7 +860,7 @@ class GroupDecomposer(object):
             GroupDecomposer.update_group_map_from_chain(group_map, chain_map)
 
             # Find internal phosphate chains (ones in the middle of the molecule).
-            smarts_str = GroupDecomposer._InternalPChainSmarts(length)
+            smarts_str = GroupDecomposer._internal_p_chain_smarts(length)
             chain_map = dict((k, []) for (k, _) in group_map.items())
             for pchain in mol.find_smarts(smarts_str):
                 working_pchain = list(pchain)
@@ -882,7 +882,7 @@ class GroupDecomposer(object):
             GroupDecomposer.update_group_map_from_chain(group_map, chain_map)
             
             # Find terminal phosphate chains.
-            smarts_str = GroupDecomposer._TerminalPChainSmarts(length)
+            smarts_str = GroupDecomposer._terminal_p_chain_smarts(length)
             chain_map = dict((k, []) for (k, _) in group_map.items())
             for pchain in mol.find_smarts(smarts_str):
                 working_pchain = list(pchain)
@@ -937,14 +937,12 @@ class GroupDecomposer(object):
         for group in self.groups_data.groups:
             # Phosphate chains require a special treatment
             if group.is_phosphate():
-                pchain_groups = None
                 if group.ignore_charges() or ignore_protonations:
                     pchain_groups = self.find_phosphate_chains(mol, ignore_protonations=True)
                 elif group.charge_sensitive():
                     pchain_groups = self.find_phosphate_chains(mol, ignore_protonations=False)
                 else:
-                    raise MalformedGroupDefinitionError(
-                        'Unrecognized phosphate wildcard: %s' % group.name)
+                    raise MalformedGroupDefinitionError('Unrecognized phosphate wildcard: %s' % group.name)
                 
                 for phosphate_group, group_nodesets in pchain_groups:
                     current_groups = []
@@ -966,10 +964,10 @@ class GroupDecomposer(object):
                 for nodes in mol.find_smarts(group.smarts):
                     try:
                         focal_set = group.focal_set(nodes)
-                    except IndexError:
+                    except IndexError as e:
                         logging.error('Focal set for group %s is out of range: %s'
                                       % (str(group), str(group.focal_atoms)))
-                        sys.exit(-1)
+                        raise e
 
                     # check that the focal-set doesn't override an assigned node
                     if focal_set.issubset(unassigned_nodes): 
@@ -992,8 +990,8 @@ class GroupDecomposer(object):
 def inchi_to_group_vector(group_decomposer, inchi):
     try:
         mol = Molecule.from_inchi(str(inchi))
-    except OpenBabelError:
-        raise GroupDecompositionError('cannot convert InChI to Molecule')
+    except OpenBabelError as e:
+        raise GroupDecompositionError('cannot convert InChI (%s) to Molecule (cause %s)' % (inchi, str(e)))
 
     # mol.RemoveHydrogens()
     decomposition = group_decomposer.decompose(mol, ignore_protonations=False, strict=True)
@@ -1007,8 +1005,8 @@ def inchi_to_group_vector(group_decomposer, inchi):
 def smiles_to_group_vector(group_decomposer, smiles):
     try:
         mol = Molecule.from_smiles(str(smiles))
-    except OpenBabelError:
-        raise GroupDecompositionError('cannot convert InChI to Molecule')
+    except OpenBabelError as e:
+        raise GroupDecompositionError('cannot convert SMILES (%s) to Molecule (cause %s)' % (smiles, str(e)))
 
     # mol.RemoveHydrogens()
     decomposition = group_decomposer.decompose(mol, ignore_protonations=False, strict=True)
