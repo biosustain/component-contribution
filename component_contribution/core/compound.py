@@ -4,6 +4,7 @@ import re
 import openbabel
 import numpy as np
 import requests
+from component_contribution.exceptions import OpenBabelError
 
 from scipy.misc import logsumexp
 
@@ -328,7 +329,13 @@ class Compound(object):
 
     @property
     def molecule(self):
-        return Molecule.from_smiles(self.smiles_ph_7)
+        try:
+            return Molecule.from_smiles(self.smiles_ph_7)
+        except OpenBabelError:
+            try:
+                return Molecule.from_inchi(self.inchi)
+            except OpenBabelError:
+                return None
 
     @property
     def non_polar_surface_area(self):
@@ -341,6 +348,8 @@ class Compound(object):
         if self.inchi.startswith("InChI=1S/H2O/h1H2"):  # Water
             return 55
         molecule = self.molecule
+        if molecule is None:
+            return 1/1000
         charged_atoms = len([c for c in molecule.atom_charges if c != 0])
         return np.math.exp(charged_atoms * 1.0425 - self.non_polar_surface_area * 0.0272) / 1000
 

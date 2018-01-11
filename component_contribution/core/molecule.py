@@ -60,6 +60,8 @@ class Molecule(object):
 
     @classmethod
     def from_smiles(cls, smiles):
+        if smiles is None:
+            raise OpenBabelError("Cannot read the SMILES: None")
         obmol = openbabel.OBMol()
         converter = openbabel.OBConversion()
         converter.AddOption("w", converter.OUTOPTIONS)
