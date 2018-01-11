@@ -55,41 +55,44 @@ def invert_project(A, eps=1e-10):
     return inv_A, r, P_R, P_N
 
 
-def _row_uniq(A):
+def row_uniq(array):
     """
-        A procedure usually performed before linear regression (i.e. solving Ax = y).
-        If the matrix A contains repeating rows, it is advisable to combine
-        all of them to one row, and the observed value corresponding to that
-        row will be the average of the original observations.
+    A procedure usually performed before linear regression (i.e. solving Ax = y).
+    If the matrix A contains repeating rows, it is advisable to combine all of them to one row,
+    and the observed value corresponding to that row will be the average of the original observations.
 
-        Input:
-            A - a 2D NumPy array
+    Parameters
+    ----------
+        array - a 2D NumPy array
 
-        Returns:
-            A_unique, P_row
+    Returns
+    -------
+    array_unique : ndarray
+        An array with the same number of columns as array, but with unique rows.
+    P_row :
 
-            where A_unique has the same number of columns as A, but with
-            unique rows.
-            P_row is a matrix that can be used to map the original rows
-            to the ones in A_unique (all values in P_row are 0 or 1).
+
+
+        P_row is a matrix that can be used to map the original rows
+        to the ones in A_unique (all values in P_row are 0 or 1).
     """
     # convert the rows of A into tuples so we can compare them
-    A_tuples = [tuple(A[i,:].flat) for i in xrange(A.shape[0])]
-    A_unique = list(sorted(set(A_tuples), reverse=True))
+    tuples = [tuple(array[i, :].flat) for i in range(array.shape[0])]
+    array_unique = list(sorted(set(tuples), reverse=True))
 
     # create the projection matrix that maps the rows in A to rows in
     # A_unique
-    P_col = np.matrix(np.zeros((len(A_unique), len(A_tuples))))
+    P_col = np.matrix(np.zeros((len(array_unique), len(tuples))))
 
-    for j, tup in enumerate(A_tuples):
+    for j, tup in enumerate(tuples):
         # find the indices of the unique row in A_unique which correspond
         # to this original row in A (represented as 'tup')
-        i = A_unique.index(tup)
+        i = array_unique.index(tup)
         P_col[i, j] = 1
 
-    return np.matrix(A_unique), P_col
+    return np.matrix(array_unique), P_col
 
 
 def col_uniq(A):
-    A_unique, P_col = _row_uniq(A.T)
+    A_unique, P_col = row_uniq(A.T)
     return A_unique.T, P_col.T
