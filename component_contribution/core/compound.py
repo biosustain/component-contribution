@@ -24,8 +24,6 @@ KEGG_CPD_RE = re.compile("^C\d{5}$")
 CHEBI_CPD_RE = re.compile("^CHEBI:\d+$")
 HMDB_CPD_RE = re.compile("^HMDB\d+$")
 
-INCHI_CPD_RE = re.compile("^InChI\=1S?\/[A-Za-z0-9]+(\+[0-9]+)?(\/[cnpqbtmsih][A-Za-z0-9\-\+\(\)\,\/]+)*$")
-
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +41,7 @@ EXCEPTIONS = {
     # ChemAxon gets confused with the structure of hydrogen
     'C00282': ({'H': 2, 'e-': 2}, [], None, 0, [2], [0]),
     # When given the structure of carbonic acid, ChemAxon returns the pKas for CO2(tot), i.e. it assumes the
-    # non-hydrated CO2 species is # one of the pseudoisomers, and the lower pKa value is 6.05 instead of 3.78.
+    # non-hydrated CO2 species is one of the pseudoisomers, and the lower pKa value is 6.05 instead of 3.78.
     # Here, we introduce a new "KEGG" compound that will represent pure bicarbonate (without CO2(sp)) and therefore
     # plug in the pKa values from Alberty's book.
     'C01353': ({'C': 1, 'H': 1, 'O': 3, 'e-': 32}, [10.33, 3.43], 'OC(=O)[O-]', 1, [0, 1, 2], [-2, -1, 0]),
@@ -92,12 +90,14 @@ class Compound(object):
 
     """
     
-    def __init__(self, database, compound_id, inchi, atom_bag, p_kas,
-                 smiles_ph_7, major_ms_ph_7, number_of_protons, charges, molfile=None):
+    def __init__(self, database, compound_id, inchi, inchi_key, atom_bag, p_kas, smiles_ph_7,
+                 major_ms_ph_7, number_of_protons, charges, npsa=None, molfile=None):
         self.database = database
         self.compound_id = compound_id
         self.inchi = inchi
+        self.inchi_key = inchi_key
         self.atom_bag = atom_bag
+        self._npsa = npsa
         self.p_kas = p_kas
         self.smiles_ph_7 = smiles_ph_7
         self.major_ms_ph_7 = major_ms_ph_7
@@ -107,13 +107,7 @@ class Compound(object):
 
     @property
     def id(self):
-        return self.inchi2inchi_key(self.inchi)
-
-    @property
-    def inchi_key(self):
-        if self.inchi is None:
-            return None
-        return self.inchi2inchi_key(self.inchi)
+        return self.inchi_key if self.inchi_key is not None else self.compound_id
 
     def __repr__(self):
         return "<Compound (%s:%s) %s>" % (self.database, self.compound_id, self.smiles_ph_7)
@@ -126,10 +120,10 @@ class Compound(object):
             return cls.from_chebi(compound_id)
         elif HMDB_CPD_RE.match(compound_id):
             return cls.from_hmdb(compound_id)
-        elif INCHI_CPD_RE.match(compound_id):
+        elif compound_id.startswith("InChI="):
             return cls.from_inchi(compound_id, "UNKNOWN", cls.inchi2inchi_key(compound_id))
         else:
-            return cls("UNKNOWN", compound_id, None, {}, [], None, 0, [0], [0])
+            return cls("UNKNOWN", compound_id, None, None, {}, [], None, 0, [0], [0])
 
     @classmethod
     def from_kegg(cls, compound_id):
@@ -150,11 +144,12 @@ class Compound(object):
     @classmethod
     def from_inchi(cls, inchi, database, compound_id):
         if compound_id in EXCEPTIONS:
-            return cls(database, compound_id, inchi, *EXCEPTIONS[compound_id])
+            inchi_key = cls.inchi2inchi_key(inchi)
+            return cls(database, compound_id, inchi, inchi_key, *EXCEPTIONS[compound_id])
         # If the compound has no explicit structure, we assume that it has
         # no proton dissociation in the relevant pH range
         elif inchi is None:
-            return cls(database, compound_id, inchi, {}, [], None, 0, [0], [0])
+            return cls(database, compound_id, inchi, None, {}, [], None, 0, [0], [0])
 
         # Otherwise, we use ChemAxon's software to get the pKas and the 
         # properties of all microspecies
@@ -190,29 +185,38 @@ class Compound(object):
         for i in range(n_species):
             zs.append((i - major_ms_ph7) + major_ms_charge)
             number_of_protons.append((i - major_ms_ph7) + major_ms_number_of_protons)
-        
-        return cls(database, compound_id, inchi, atom_bag, p_kas, major_ms_smiles, major_ms_ph7, number_of_protons, zs)
+
+        inchi_key = cls.inchi2inchi_key(inchi)
+        return cls(database, compound_id, inchi, inchi_key, atom_bag, p_kas,
+                   major_ms_smiles, major_ms_ph7, number_of_protons, zs)
 
     def to_json_dict(self):
         return {'database': self.database,
                 'compound_id': self.compound_id,
                 'inchi': self.inchi,
+                'inchi_key': self.inchi_key,
                 'atom_bag': self.atom_bag,
                 'p_kas': self.p_kas,
                 'smiles_ph_7': self.smiles_ph_7,
                 'major_ms_ph_7': self.major_ms_ph_7,
                 'number_of_protons': self.number_of_protons,
-                'zs': self.charges}
+                'zs': self.charges,
+                'npsa': self._npsa}
     
-    @staticmethod
-    def from_json_dict(d):
-        return Compound(d['database'], d['compound_id'], d['inchi'], d['atom_bag'], d['p_kas'],
-                        d['smiles_ph_7'], d['major_ms_ph_7'], d['number_of_protons'], d['zs'])
+    @classmethod
+    def from_json_dict(cls, d):
+        inchi = d['inchi']
+        inchi_key = d.get('inchi_key')
+        if inchi is not None and inchi_key is None:  # Legacy data has no inchi_key
+            inchi_key = cls.inchi2inchi_key(inchi)
 
-    @staticmethod
-    def get_inchi_from_kegg(compound_id):
+        return cls(d['database'], d['compound_id'], inchi, inchi_key, d['atom_bag'], d['p_kas'],
+                   d['smiles_ph_7'], d['major_ms_ph_7'], d['number_of_protons'], d['zs'], npsa=d.get('npsa', None))
+
+    @classmethod
+    def get_inchi_from_kegg(cls, compound_id):
         s_mol = KEGG.get('cpd:%s' % compound_id, 'mol')
-        return Compound.mol2inchi(s_mol)
+        return cls.mol2inchi(s_mol)
 
     @staticmethod
     def get_inchi_from_chebi(compound_id):
@@ -220,10 +224,10 @@ class Compound(object):
         if hasattr(entity, 'inchi'):
             return entity.inchi
 
-    @staticmethod
-    def get_inchi_from_hmdb(compound_id):
+    @classmethod
+    def get_inchi_from_hmdb(cls, compound_id):
         s_mol = requests.get(HMDB_URL % compound_id)
-        return Compound.mol2inchi(s_mol)
+        return cls.mol2inchi(s_mol)
 
     @staticmethod
     def inchi2inchi_key(inchi):
@@ -327,11 +331,18 @@ class Compound(object):
         return Molecule.from_smiles(self.smiles_ph_7)
 
     @property
+    def non_polar_surface_area(self):
+        if self._npsa is None:
+            self._npsa = non_polar_surface_area(self.inchi)
+        return self._npsa
+
+    @property
     def concentration(self):
+        if self.inchi.startswith("InChI=1S/H2O/h1H2"):  # Water
+            return 55
         molecule = self.molecule
         charged_atoms = len([c for c in molecule.atom_charges if c != 0])
-        npsa = non_polar_surface_area(self.inchi)
-        return np.math.exp(charged_atoms * 1.0425 - npsa * 0.0272) / 1000
+        return np.math.exp(charged_atoms * 1.0425 - self.non_polar_surface_area * 0.0272) / 1000
 
     def _dG0_prime_vector(self, ph, ionic_strength, temperature):
         """
