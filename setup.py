@@ -8,7 +8,7 @@ requirements = ['scipy>=0.14.0',
                 'requests>=2.18']
 
 setup(
-    name='ComponentContribution',
+    name='component_contribution',
     version='2.0',
     author='Elad Noor, Joao Cardoso',
     author_email='noor@imsb.biol.ethz.ch, joaca@biosustain.dtu.dk',
@@ -22,9 +22,9 @@ setup(
                           'data/formation_energies_transformed.tsv',
                           'data/equilibrator_compounds.json.gz',
                           'data/kegg_additions.tsv',
-                          'data/kegg_compounds.json.gz']),
-                ('cache', ['cache/compounds.json.gz',
-                           'cache/component_contribution_python.mat'])],
+                          'data/kegg_compounds.json.gz',
+                          'data/cached_compounds.json.gz']),
+                ('cache', ['cache/component_contribution_python.mat'])],
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Science/Research',
