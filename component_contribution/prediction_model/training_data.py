@@ -213,6 +213,14 @@ class TrainingData(object):
         
         thermo_params = tecrdb_params + formation_params + redox_params
         return thermo_params, cids_that_dont_decompose
+
+    @property
+    def water_id(self):
+        return self.ccache.compound_id2inchi_key["C00001"]
+
+    @property
+    def proton_id(self):
+        return self.ccache.compound_id2inchi_key['C00080']
     
     def balance_reactions(self, reaction_indices_to_balance):
         """
@@ -230,7 +238,7 @@ class TrainingData(object):
         # need to check that all elements are balanced (except H, but including e-)
         # if only O is not balanced, add water molecules
         if 'O' in elements:
-            i_h2o = self.cids.index('C00001')
+            i_h2o = self.cids.index(self.water_id)
             j_o = elements.index('O')
             conserved = np.dot(element_matrix.T, self.S)
             for k in reaction_indices_to_balance:
@@ -281,7 +289,7 @@ class TrainingData(object):
         for i in range(number_of_reactions):
             for j in np.nonzero(self.S[:, i])[0]:
                 cid = self.cids[j]
-                if cid == 'C00080':  # H+ should be ignored in the Legendre transform
+                if cid == self.proton_id:  # H+ should be ignored in the Legendre transform
                     continue
                 comp = self.ccache.get_compound(cid)
                 ddG0 = comp.transform_ph7(self.pH[i], self.I[i], self.T[i])
