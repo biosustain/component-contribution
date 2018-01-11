@@ -15,6 +15,9 @@ from component_contribution.exceptions import GroupDecompositionError
 from component_contribution.prediction_model.training_data import TrainingData
 from component_contribution.thermodynamics.constants import STANDARD_T, R
 
+
+logger = logging.getLogger(__name__)
+
 base_path = os.path.split(os.path.realpath(__file__))[0]
 CC_CACHE_FNAME = os.path.join(base_path, '../../cache/component_contribution_python.mat')
 
@@ -43,16 +46,19 @@ class ComponentContributionModel(object):
         self.number_of_groups = len(self.group_names)
 
     @classmethod
-    def init(cls):
+    def init(cls, matfile=CC_CACHE_FNAME):
         training_data = TrainingData()
         group_data = init_groups_data()
-        if os.path.exists(CC_CACHE_FNAME):
+
+        if matfile is not None and os.path.exists(matfile):
             logging.debug('Loading component-contributions from cache')
-            return cls.from_matfile(CC_CACHE_FNAME, training_data, group_data)
+            return cls.from_matfile(matfile, training_data, group_data)
         else:
             logging.debug('Calculating the component-contributions from raw data')
             cc = cls(training_data, group_data)
-            cc.save_matfile(CC_CACHE_FNAME)
+            cc.train()
+            if matfile is not None:
+                cc.save_matfile(matfile)
             return cc
 
     def save_matfile(self, file_name):
@@ -128,8 +134,7 @@ class ComponentContributionModel(object):
                 # are not in cids_joined anyway.
                 x_prime.append(coefficient)
 
-                if compound_id in self.ccache:
-                    comp = self.ccache.get_compound(compound_id)
+                comp = self.ccache.get_compound(compound_id)
                 group_vec = smiles_to_group_vector(self.decomposer, comp.smiles_ph_7)
                 G_prime.append(group_vec.to_array())
 
@@ -169,7 +174,8 @@ class ComponentContributionModel(object):
         """
         try:
             x, g = self.decompose_reaction(reaction)
-        except group_vector.GroupDecompositionError:
+        except group_vector.GroupDecompositionError as e:
+            logger.warning("Failed to decompose reaction %s (%s)" % (reaction.reaction_id,  str(e)))
             if not include_analysis:
                 return 0, 1e5
             else:
@@ -184,12 +190,12 @@ class ComponentContributionModel(object):
         dg0 = float(x.T * v_r + g.T * v_g)
         s_cc_sqr = float(x.T * c1 * x + 2 * x.T * c2 * g + g.T * c3 * g)
 
-        if adjust_concentrations:
-            dg = dg0 + R * temperature * np.log(reaction.quotient)
-            return dg, s_cc_sqr
-
         if not include_analysis:
-            return dg0, np.sqrt(s_cc_sqr)
+            if adjust_concentrations:
+                dg = dg0 + R * temperature * np.log(reaction.quotient)
+                return dg, np.sqrt(s_cc_sqr)
+            else:
+                return dg0, np.sqrt(s_cc_sqr)
         else:
             # Analyse the contribution of each training observation to this 
             # reaction's dG0 estimate.
@@ -215,7 +221,11 @@ class ComponentContributionModel(object):
                 analysis.append({'index': j, 'w_rc': weights_rc[0, j], 'w_gc': weights_gc[0, j],
                                  'reaction': r, 'count': int(S_count[0, j])})
 
-            return dg0, np.sqrt(s_cc_sqr), analysis
+            if adjust_concentrations:
+                dg = dg0 + R * temperature * np.log(reaction.quotient)
+                return dg, np.sqrt(s_cc_sqr), analysis
+            else:
+                return dg0, np.sqrt(s_cc_sqr), analysis
 
     def get_dg0_r_multi(self, reactions):
         """
@@ -335,16 +345,16 @@ class ComponentContributionModel(object):
             
         return d
     
-    def estimate_model(self, stoichiometric_matrix, model_cids):
+    def estimate_model(self, stoichiometric_matrix, model_compound_ids):
     
         # standardize the CID list of the training data and the prediction_model
         # and create new (larger) matrices for each one
-        cids_new = [cid for cid in model_cids if cid not in self.train_cids]
+        compound_ids = [cid for cid in model_compound_ids if cid not in self.train_cids]
 
-        self.cids_joined += cids_new
+        self.cids_joined += compound_ids
         self.number_of_compounds = len(self.cids_joined)
                 
-        self.model_S_joined = linalg.zero_pad_S(stoichiometric_matrix, model_cids, self.cids_joined)
+        self.model_S_joined = linalg.zero_pad_S(stoichiometric_matrix, model_compound_ids, self.cids_joined)
 
         self.train_S_joined = linalg.zero_pad_S(self.train_S, self.train_cids, self.cids_joined)
 
