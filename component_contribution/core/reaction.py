@@ -31,11 +31,19 @@ class Reaction(object):
             if not isinstance(coefficient, (float, int)):
                 raise ValueError('All stoichiometric coefficients in Reaction must be integers or floats')
 
-        self.stoichiometry = {k: v for k, v in stoichiometry.items() if v}
+        self.compound_cache = CompoundCache.get_instance()
+
+        # translate compound ids
+        self.stoichiometry = {}
+        for compound_id, coefficient in stoichiometry.items():
+            if coefficient != 0:
+                compound = self.compound_cache.get_compound(compound_id)
+                self.stoichiometry[compound.id] = coefficient
+
         self.arrow = arrow
         self.database = database
         self.reaction_id = reaction_id
-        self.compound_cache = CompoundCache.get_instance()
+
 
     @staticmethod
     def __format_compound(compound_id, coefficient):
