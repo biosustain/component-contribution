@@ -205,7 +205,7 @@ class Singleton(object, metaclass=MetaSingleton):
         """
         if cls._is_instantiated():
             if (args or kwargs) and not hasattr(cls, 'ignore_subsequent'):
-                raise SingletonException('Singleton already instantiated, but getInstance() called with args.')
+                raise SingletonException('Singleton already instantiated, but get_instance() called with args.')
         else:
             _create_singleton_instance(cls, args, kwargs)
             
