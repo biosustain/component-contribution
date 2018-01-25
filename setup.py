@@ -1,5 +1,4 @@
-from setuptools import setup
-
+from setuptools import setup, find_packages
 
 requirements = ['scipy>=0.14.0',
                 'numpy>=1.6.2',
@@ -14,7 +13,7 @@ setup(
     author_email='noor@imsb.biol.ethz.ch, joaca@biosustain.dtu.dk',
     description='Standard reaction Gibbs energy estimation for biochemical reactions',
     license='MIT',
-    packages=['component_contribution'],
+    packages=find_packages(),
     url='https://github.com/eladnoor/component-contribution',
     install_requires=requirements,
     data_files=[('data', ['data/TECRDB.tsv', 
