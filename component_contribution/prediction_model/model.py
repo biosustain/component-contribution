@@ -174,7 +174,7 @@ class ComponentContributionModel(object):
         try:
             x, g = self.decompose_reaction(reaction)
         except group_vector.GroupDecompositionError as e:
-            logger.warning("Failed to decompose reaction %s (%s)" % (reaction.reaction_id,  str(e)))
+            logger.warning("Failed to decompose reaction %s (%s)" % (reaction.id,  str(e)))
             if not include_analysis:
                 return 0, 1e5
             else:

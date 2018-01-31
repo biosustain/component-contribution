@@ -69,7 +69,7 @@ class Reaction(CobraReaction):
             compound = compound_cache.get_compound(compound_id)
             stoichiometry[compound] = stoichiometry.get(compound_id, 0) + count
 
-        reaction = cls(database=database, reaction_id=reaction_id)
+        reaction = cls(reaction_id=reaction_id, database=database)
         reaction.add_metabolites(stoichiometry)
         return reaction
 

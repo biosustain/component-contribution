@@ -93,7 +93,7 @@ class TrainingData(object):
         csv_output.writerow(['reaction', 'T', 'I', 'pH', 'reference', 'dG0', 'dG0_prime'])
         for j in range(self.S.shape[1]):
             stoichiometry = {self.ccache.get_compound(self.cids[i]): self.S[i, j] for i in range(self.S.shape[0])}
-            reaction = Reaction(reaction_id="-")
+            reaction = Reaction()
             reaction.add_metabolites(stoichiometry)
             csv_output.writerow([reaction.reaction, self.T[j], self.I[j], self.pH[j],
                                  self.reference[j], self.dG0[j], self.dG0_prime[j]])
