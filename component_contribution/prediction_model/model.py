@@ -119,9 +119,9 @@ class ComponentContributionModel(object):
         x_prime = []
         G_prime = []
 
-        for compound_id, coefficient in reaction.stoichiometry.items():
-            if compound_id in self.cids_joined:  # cids_joined is the list of cid used in the training data
-                i = cids.index(compound_id)
+        for compound, coefficient in reaction.metabolites.items():
+            if compound.id in self.cids_joined:  # cids_joined is the list of cid used in the training data
+                i = cids.index(compound.id)
                 x[i, 0] = coefficient
             else:
                 # Decompose the compound and calculate the 'formation energy'
@@ -134,8 +134,7 @@ class ComponentContributionModel(object):
                 # are not in cids_joined anyway.
                 x_prime.append(coefficient)
 
-                comp = self.ccache.get_compound(compound_id)
-                group_vec = smiles_to_group_vector(self.decomposer, comp.smiles_ph_7)
+                group_vec = smiles_to_group_vector(self.decomposer, compound.smiles_ph_7)
                 G_prime.append(group_vec.to_array())
 
         if len(x_prime) > 0:

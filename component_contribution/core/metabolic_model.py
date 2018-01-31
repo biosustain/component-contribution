@@ -129,7 +129,7 @@ class MetabolicModel(object):
 
         compound_ids = set()
         for reaction in kegg_reactions:
-            compound_ids = compound_ids.union(reaction.stoichiometry.keys())
+            compound_ids = compound_ids.union(reaction.compound_ids)
         
         # convert the list of reactions in sparse notation into a full
         # stoichiometric matrix, where the rows (compounds) are according to the

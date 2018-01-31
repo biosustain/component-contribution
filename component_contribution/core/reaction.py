@@ -183,9 +183,9 @@ class Reaction(CobraReaction):
             The count of elements balance.
         """
         try:
-            compound_ids = list(self.stoichiometry.keys())
-            coefficients = map(self.stoichiometry.__getitem__, compound_ids)
-            coefficients = np.array(list(coefficients))
+            compounds = list(self.metabolites.keys())
+            coefficients = np.array(list(map(self.metabolites.__getitem__, compounds)))
+            compound_ids = [c.id for c in compounds]
 
             cached_compound_ids = set(self.compound_cache.compound_ids)
             if not cached_compound_ids.issuperset(compound_ids):
@@ -226,21 +226,24 @@ class Reaction(CobraReaction):
             return False
 
         if fix_water and 'O' in reaction_atom_bag:
-            self.stoichiometry.setdefault('C00001', 0)
-            self.stoichiometry['C00001'] += -reaction_atom_bag['O']
-            if self.stoichiometry['C00001'] == 0:
-                del self.stoichiometry['C00001']
+            water = self.compound_cache.get_compound("C00001")
+            stoichiometry = self.metabolites
+            stoichiometry.setdefault(water, 0)
+            stoichiometry[water] += -reaction_atom_bag['O']
+            if stoichiometry[water] == 0:
+                del self.metabolites[water]
+            self.add_metabolites(stoichiometry, combine=False)
             reaction_atom_bag = self.atom_bag()
 
         return len(reaction_atom_bag) == 0
 
     def is_empty(self):
-        return len(self.stoichiometry) == 0
+        return len(self.metabolites) == 0
 
     def dense(self, ids):
         s = np.matrix(np.zeros((len(ids), 1)))
-        for compound_id, coefficient in self.stoichiometry.items():
-            s[ids.index(compound_id), 0] = coefficient
+        for compound, coefficient in self.metabolites.items():
+            s[ids.index(compound.id), 0] = coefficient
         return s
 
     def transform_ddg0(self, ph, ionic_strength, temperature):
@@ -254,8 +257,7 @@ class Reaction(CobraReaction):
             energy of reaction (DrG0) to get the transformed value.
         """
         ddg0_forward = 0
-        for compound_id, coefficient in self.stoichiometry.items():
-            comp = self.compound_cache.get_compound(compound_id)
-            ddg0_forward += coefficient * comp.transform_ph7(ph, ionic_strength, temperature)
+        for compound, coefficient in self.metabolites.items():
+            ddg0_forward += coefficient * compound.transform_ph7(ph, ionic_strength, temperature)
         return ddg0_forward
 

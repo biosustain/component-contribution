@@ -42,8 +42,8 @@ class TrainingData(object):
         # CID list 'cids'.
         self.S = np.zeros((len(cids), len(thermo_params)))
         for k, a in enumerate(thermo_params):
-            for compound_id, coefficient in a['reaction'].stoichiometry.items():
-                self.S[cids.index(compound_id), k] = coefficient
+            for compound, coefficient in a['reaction'].metabolites.items():
+                self.S[cids.index(compound.id), k] = coefficient
             
         self.cids = cids
 
@@ -254,8 +254,9 @@ class TrainingData(object):
         for k in reaction_indices_to_remove:
             stoichiometry = {}
             for i in np.nonzero(self.S[:, k])[0]:
-                stoichiometry[self.cids[i]] = self.S[i, k]
-            reaction = Reaction(stoichiometry)
+                stoichiometry[self.ccache.get_compound(self.cids[i])] = self.S[i, k]
+            reaction = Reaction()
+            reaction.add_metabolites(stoichiometry)
             logging.debug('unbalanced reaction #%d: %s' % (k, reaction.reaction))
             for j in np.where(conserved[:, k])[0].flat:
                 logging.debug('there are %d more %s atoms on the right-hand side' % (conserved[j, k], elements[j]))
