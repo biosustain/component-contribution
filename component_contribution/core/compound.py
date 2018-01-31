@@ -4,11 +4,13 @@ import re
 import openbabel
 import numpy as np
 import requests
-from component_contribution.exceptions import OpenBabelError
 
 from scipy.misc import logsumexp
 
 import bioservices
+
+from cobra.core.metabolite import Metabolite
+from component_contribution.exceptions import OpenBabelError
 
 from component_contribution import chemaxon
 from component_contribution.chemaxon import non_polar_surface_area
@@ -64,7 +66,7 @@ EXCEPTIONS = {
 }
 
 
-class Compound(object):
+class Compound(Metabolite):
     """
     Representation of a chemical compound.
 
@@ -93,6 +95,7 @@ class Compound(object):
     
     def __init__(self, database, compound_id, inchi, inchi_key, atom_bag, p_kas, smiles_ph_7,
                  major_ms_ph_7, number_of_protons, charges, npsa=None, molfile=None):
+        super(Compound, self).__init__(inchi_key or compound_id)
         self.database = database
         self.compound_id = compound_id
         self.inchi = inchi
@@ -105,10 +108,6 @@ class Compound(object):
         self.number_of_protons = number_of_protons
         self.charges = charges
         self.molfile = molfile
-
-    @property
-    def id(self):
-        return self.inchi_key if self.inchi_key is not None else self.compound_id
 
     def __repr__(self):
         return "<Compound (%s:%s) %s>" % (self.database, self.compound_id, self.smiles_ph_7)
@@ -135,7 +134,6 @@ class Compound(object):
     def from_chebi(cls, compound_id):
         inchi = cls.get_inchi_from_chebi(compound_id)
         return cls.from_inchi(inchi, "CHEBI", compound_id)
-
 
     @classmethod
     def from_hmdb(cls, compound_id):
@@ -236,8 +234,6 @@ class Compound(object):
 
         converter = openbabel.OBConversion()
         converter.SetInAndOutFormats('inchi', 'inchikey')
-        # converter.AddOption("F", converter.OUTOPTIONS)
-        # converter.AddOption("T", converter.OUTOPTIONS)
         converter.AddOption("x", converter.OUTOPTIONS, "noiso")
         converter.AddOption("w", converter.OUTOPTIONS)
         obmol = openbabel.OBMol()
@@ -255,8 +251,6 @@ class Compound(object):
 
         converter = openbabel.OBConversion()
         converter.SetInAndOutFormats('mol', 'inchi')
-        # converter.AddOption("F", converter.OUTOPTIONS)
-        # converter.AddOption("T", converter.OUTOPTIONS)
         converter.AddOption("x", converter.OUTOPTIONS, "noiso")
         converter.AddOption("w", converter.OUTOPTIONS)
         obmol = openbabel.OBMol()
@@ -274,10 +268,6 @@ class Compound(object):
         
         conv = openbabel.OBConversion()
         conv.SetInAndOutFormats('inchi', 'smiles')
-        #conv.AddOption("F", conv.OUTOPTIONS)
-        #conv.AddOption("T", conv.OUTOPTIONS)
-        #conv.AddOption("x", conv.OUTOPTIONS, "noiso")
-        #conv.AddOption("w", conv.OUTOPTIONS)
         obmol = openbabel.OBMol()
         conv.ReadString(obmol, str(inchi))
         smiles = conv.WriteString(obmol, True) # second argument is trimWhitespace
@@ -292,10 +282,6 @@ class Compound(object):
         
         conv = openbabel.OBConversion()
         conv.SetInAndOutFormats('smiles', 'smiles')
-        # conv.AddOption("h", conv.OUTOPTIONS)
-        # conv.AddOption("T", conv.OUTOPTIONS)
-        # conv.AddOption("x", conv.OUTOPTIONS, "noiso")
-        # conv.AddOption("w", conv.OUTOPTIONS)
         obmol = openbabel.OBMol()
         conv.ReadString(obmol, str(smiles_in))
         smiles_out = conv.WriteString(obmol, True) # second argument is trimWhitespace
