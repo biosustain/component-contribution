@@ -4,7 +4,8 @@ requirements = ['scipy>=0.14.0',
                 'numpy>=1.6.2',
                 'pandas>=0.21',
                 'bioservices>=1.5',
-                'requests>=2.18']
+                'requests>=2.18',
+                'cobra>=0.10']
 
 setup(
     name='component_contribution',
