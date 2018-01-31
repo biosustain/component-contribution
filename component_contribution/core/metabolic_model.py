@@ -155,7 +155,7 @@ class MetabolicModel(object):
             reaction = Reaction.from_equation(line, arrow, database, reaction_id)
         except ParseException as e:
             logger.warning(str(e))
-            reaction = Reaction({})
+            reaction = Reaction()
         return reaction
 
     @staticmethod
@@ -187,10 +187,10 @@ class MetabolicModel(object):
                 if not reaction.is_balanced(fix_water=True, raise_exception=raise_exception):
                     not_balanced_count += 1
                     logger.warning('Model contains an unbalanced reaction: ' + line)
-                    reaction = Reaction({})
+                    reaction = Reaction()
 
                 reactions.append(reaction)
-                logger.debug('Adding reaction: ' + reaction.equation)
+                logger.debug('Adding reaction: ' + reaction.reaction)
 
             if not_balanced_count > 0:
                 warning_str = '%d out of the %d reactions are not chemically balanced' % (not_balanced_count,
@@ -242,13 +242,13 @@ class MetabolicModel(object):
                     reaction = Reaction.from_equation(line, arrow, rid)
                 except ParseException as e:
                     logging.warning(str(e))
-                    reaction = Reaction({})
+                    reaction = Reaction()
                 if not reaction.is_balanced(fix_water=True, raise_exception=raise_exception):
                     not_balanced_count += 1
                     logging.warning('Model contains an unbalanced reaction: ' + line)
-                    reaction = Reaction({})
+                    reaction = Reaction()
                 reactions.append(reaction)
-                logger.debug('Adding reaction: ' + reaction.equation)
+                logger.debug('Adding reaction: ' + reaction.reaction)
             
             if not_balanced_count > 0:
                 logger.debug('%d out of the %d reactions are not chemically balanced'
@@ -267,9 +267,10 @@ class MetabolicModel(object):
         number_of_compounds, number_of_reactions = self.s_matrix.shape
         reactions = []
         for j in range(number_of_reactions):
-            stoichiometry = {self.compound_ids[i]: self.s_matrix[i, j]
+            stoichiometry = {self.ccache.get_compound(self.compound_ids[i]): self.s_matrix[i, j]
                              for i in range(number_of_compounds) if self.s_matrix[i, j] != 0}
-            reaction = Reaction(stoichiometry)
+            reaction = Reaction()
+            reaction.add_metabolites(stoichiometry)
             reactions.append(reaction)
 
         self.dg0, self.cov_dg0 = component_contribution_model.get_dg0_r_multi(reactions)
@@ -351,12 +352,16 @@ class MetabolicModel(object):
         return self
 
     def write_reaction_by_index(self, r):
-        stoichiometry = dict([(cid, self.s_matrix[i, r]) for i, cid in enumerate(self.compound_ids) if self.s_matrix[i, r] != 0])
+        stoichiometry = {self.ccache.get_compound(cid): self.s_matrix[i, r] for i, cid in
+                         enumerate(self.compound_ids) if self.s_matrix[i, r] != 0}
         if self.rids is not None:
-            reaction = Reaction(stoichiometry, reaction_id=self.rids[r])
+            reaction = Reaction(self.rids[r])
         else:
-            reaction = Reaction(stoichiometry)
-        return reaction.equation
+            reaction = Reaction()
+
+        reaction.add_metabolites(stoichiometry)
+
+        return reaction.reaction
         
     def get_unidirectional_S(self):
         S_plus = np.copy(self.s_matrix)

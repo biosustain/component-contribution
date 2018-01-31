@@ -1,5 +1,8 @@
 import logging
 import re
+from uuid import uuid1
+
+from cobra.core.reaction import Reaction as CobraReaction
 
 import numpy as np
 
@@ -9,41 +12,24 @@ from component_contribution.exceptions import ParseException
 logger = logging.getLogger(__name__)
 
 
-class Reaction(object):
+class Reaction(CobraReaction):
     """
     Reaction representation.
 
     Attributes
     ----------
-    stoichiometry : dict
-        The stoichiometric representation of the reaction.
-    arrow : str
-        The arrow token to split the reaction.
     reaction_id : str
         The identifier of the reaction.
+    database : str
+        The database from where the reaction was retrieved.
 
     """
-    def __init__(self, stoichiometry, arrow=None, database=None, reaction_id=None):
-        if arrow is None:
-            arrow = '<=>'
-
-        for compound_id, coefficient in stoichiometry.items():
-            if not isinstance(coefficient, (float, int)):
-                raise ValueError('All stoichiometric coefficients in Reaction must be integers or floats')
-
+    def __init__(self, reaction_id=None, database=None):
+        if reaction_id is None:
+            reaction_id = uuid1().hex
+        super(Reaction, self).__init__(reaction_id)
         self.compound_cache = CompoundCache.get_instance()
-
-        # translate compound ids
-        self.stoichiometry = {}
-        for compound_id, coefficient in stoichiometry.items():
-            if coefficient != 0:
-                compound = self.compound_cache.get_compound(compound_id)
-                self.stoichiometry[compound.id] = coefficient
-
-        self.arrow = arrow
         self.database = database
-        self.reaction_id = reaction_id
-
 
     @staticmethod
     def __format_compound(compound_id, coefficient):
@@ -71,14 +57,21 @@ class Reaction(object):
         left = tokens[0].strip()
         right = tokens[1].strip()
 
-        sparse_reaction = {}
-        for met_id, count in cls.parse_reaction_formula_side(left).items():
-            sparse_reaction[met_id] = sparse_reaction.get(met_id, 0) - count
+        compound_cache = CompoundCache.get_instance()
+        assert isinstance(compound_cache, CompoundCache)
 
-        for met_id, count in cls.parse_reaction_formula_side(right).items():
-            sparse_reaction[met_id] = sparse_reaction.get(met_id, 0) + count
+        stoichiometry = {}
+        for compound_id, count in cls.parse_reaction_formula_side(left).items():
+            compound = compound_cache.get_compound(compound_id)
+            stoichiometry[compound] = stoichiometry.get(compound_id, 0) - count
 
-        return cls(sparse_reaction, arrow, database=database, reaction_id=reaction_id)
+        for compound_id, count in cls.parse_reaction_formula_side(right).items():
+            compound = compound_cache.get_compound(compound_id)
+            stoichiometry[compound] = stoichiometry.get(compound_id, 0) + count
+
+        reaction = cls(database=database, reaction_id=reaction_id)
+        reaction.add_metabolites(stoichiometry)
+        return reaction
 
     @staticmethod
     def parse_reaction_formula_side(s):
@@ -116,15 +109,15 @@ class Reaction(object):
 
     @property
     def compound_ids(self):
-        return set(self.stoichiometry.keys())
+        return set(compound.id for compound in self.metabolites.keys())
 
     @property
     def quotient(self):
-        products = sum(self.compound_cache.get_compound(compound_id).concentration ** coefficient
-                       for compound_id, coefficient in self.stoichiometry.items() if coefficient > 0)
+        products = sum(compound.concentration ** coefficient for compound, coefficient
+                       in self.metabolites.items() if coefficient > 0)
 
-        substrates = sum(self.compound_cache.get_compound(compound_id).concentration ** coefficient
-                         for compound_id, coefficient in self.stoichiometry.items() if coefficient < 0)
+        substrates = sum(compound.concentration ** coefficient for compound, coefficient
+                         in self.metabolites.items() if coefficient < 0)
 
         return products/substrates
 
@@ -139,12 +132,12 @@ class Reaction(object):
         """
         left = []
         right = []
-        for compound_id, coefficient in sorted(self.stoichiometry.items()):
+        for compound_id, coefficient in sorted(self.metabolites.items()):
             if coefficient < 0:
                 left.append(self.__format_compound(compound_id, -coefficient))
             elif coefficient > 0:
                 right.append(self.__format_compound(compound_id, coefficient))
-        return "%s %s %s" % (' + '.join(left), self.arrow, ' + '.join(right))
+        return "%s %s %s" % (' + '.join(left), "<=>", ' + '.join(right))
 
     def transformed_gibbs_energy(self, ph, ionic_strength, temperature):
         """
@@ -207,12 +200,12 @@ class Reaction(object):
 
             if np.any(np.isnan(conserved), 1):
                 error_message = 'cannot test reaction balancing because of unspecific ' + \
-                              'compound formulas: %s' % self.equation
+                              'compound formulas: %s' % self.reaction
                 raise ValueError(error_message)
 
             atom_bag = {}
             if np.any(conserved != 0, axis=1):
-                logger.debug('unbalanced reaction: %s' % self.equation)
+                logger.debug('unbalanced reaction: %s' % self.reaction)
                 for j, c in enumerate(conserved.flat):
                     if c != 0:
                         logger.debug('there are %d more %s atoms on the right-hand side' % (c, elements[j]))

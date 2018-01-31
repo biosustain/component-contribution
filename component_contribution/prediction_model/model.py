@@ -217,7 +217,11 @@ class ComponentContributionModel(object):
             for j in orders:
                 if abs(weights[0, j]) < 1e-5:
                     continue
-                r = Reaction({cids[i]: s_matrix[i, j] for i in range(s_matrix.shape[0]) if s_matrix[i, j] != 0})
+
+                stoichiometry = {self.ccache.get_compound(cids[i]): s_matrix[i, j] for i in
+                                 range(s_matrix.shape[0]) if s_matrix[i, j] != 0}
+                r = Reaction()
+                r.add_metabolites(stoichiometry)
                 analysis.append({'index': j, 'w_rc': weights_rc[0, j], 'w_gc': weights_gc[0, j],
                                  'reaction': r, 'count': int(S_count[0, j])})
 

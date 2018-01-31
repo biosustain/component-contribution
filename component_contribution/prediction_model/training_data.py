@@ -92,9 +92,10 @@ class TrainingData(object):
         csv_output = csv.writer(open(fname, 'w'))
         csv_output.writerow(['reaction', 'T', 'I', 'pH', 'reference', 'dG0', 'dG0_prime'])
         for j in range(self.S.shape[1]):
-            stoichiometry = {self.cids[i]: self.S[i, j] for i in range(self.S.shape[0])}
-            r_string = Reaction(stoichiometry).equation
-            csv_output.writerow([r_string, self.T[j], self.I[j], self.pH[j],
+            stoichiometry = {self.ccache.get_compound(self.cids[i]): self.S[i, j] for i in range(self.S.shape[0])}
+            reaction = Reaction(reaction_id="-")
+            reaction.add_metabolites(stoichiometry)
+            csv_output.writerow([reaction.reaction, self.T[j], self.I[j], self.pH[j],
                                  self.reference[j], self.dG0[j], self.dG0_prime[j]])
 
     @staticmethod
@@ -255,7 +256,7 @@ class TrainingData(object):
             for i in np.nonzero(self.S[:, k])[0]:
                 stoichiometry[self.cids[i]] = self.S[i, k]
             reaction = Reaction(stoichiometry)
-            logging.debug('unbalanced reaction #%d: %s' % (k, reaction.equation))
+            logging.debug('unbalanced reaction #%d: %s' % (k, reaction.reaction))
             for j in np.where(conserved[:, k])[0].flat:
                 logging.debug('there are %d more %s atoms on the right-hand side' % (conserved[j, k], elements[j]))
         
